@@ -1,0 +1,1538 @@
+<meta charset="UTF-8">
+<title>Blockiva</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+/* layout: single committed world — deep navy jewel-arcade, 8x8 board, 3-piece tray, glowing line-clear bursts. */
+:root{
+  --bg1:#5f78d9; --bg2:#3a4fac; --board:#232d63; --line:rgba(255,255,255,.09);
+  --fg:#ffffff; --muted:#c3ccf7; --accent:#ffd166; --good:#18c98a;
+  color-scheme:dark;
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; }
+body{ margin:0; background:linear-gradient(180deg,var(--bg1),var(--bg2));
+  color:var(--fg); font-family:'Nunito',sans-serif; display:flex; justify-content:center; overflow:hidden; user-select:none; touch-action:none; }
+.app{ width:100%; max-width:500px; height:100%; display:flex; flex-direction:column; gap:10px;
+  padding:calc(env(safe-area-inset-top,0px) + 14px) 14px calc(env(safe-area-inset-bottom,0px) + 10px); }
+.top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.levelchip{ display:flex; align-items:center; gap:8px; background:rgba(0,0,0,.22); border-radius:14px; padding:8px 16px; border:1.5px solid rgba(255,255,255,.15); }
+.levelchip .ico{ font-size:20px; }
+.levelchip .v{ font-family:'Baloo 2',sans-serif; font-size:20px; font-weight:800; color:var(--accent); }
+.score{ display:flex; align-items:center; gap:8px; background:rgba(0,0,0,.22); border-radius:14px; padding:8px 16px; border:1.5px solid rgba(255,255,255,.15); }
+.score .ico{ font-size:18px; }
+.score .v{ font-family:'Baloo 2',sans-serif; font-size:20px; font-weight:800; color:#fff; font-variant-numeric:tabular-nums; }
+.bigscore{ text-align:center; font-family:'Baloo 2',sans-serif; font-size:44px; font-weight:800; color:#fff;
+  text-shadow:0 3px 0 rgba(0,0,0,.2); margin:2px 0 -4px; }
+.progress-wrap{ background:rgba(0,0,0,.25); border-radius:10px; height:10px; overflow:hidden; border:1px solid rgba(255,255,255,.15); }
+.progress-bar{ height:100%; background:linear-gradient(90deg,#4fe0a0,#ffd166); width:0%; transition:width .3s ease; }
+.board-wrap{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; }
+#board{ position:relative; width:100%; max-width:460px; aspect-ratio:1; background:var(--board); border-radius:16px;
+  border:3px solid rgba(255,255,255,.18); box-shadow:inset 0 2px 10px rgba(0,0,0,.35), 0 8px 20px rgba(0,0,0,.25); overflow:hidden;
+  transition:background-color 1.4s ease; }
+.bgcell{ position:absolute; background:transparent; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
+.bgcell.hi{ box-shadow:inset 0 0 0 2px var(--good); }
+.bgcell.bad{ box-shadow:inset 0 0 0 2px #ff5d7d; }
+.block{ position:absolute; border-radius:7px; border:3px solid #000;
+  box-shadow:inset 0 -5px 0 rgba(0,0,0,.22), inset 0 3px 0 rgba(255,255,255,.5), 0 3px 7px rgba(0,0,0,.3); }
+.block.willclear{ background:linear-gradient(160deg,#fff6a8,#ffb300) !important; animation:willPulse .45s ease-in-out infinite alternate; z-index:15; }
+@keyframes willPulse{ from{ filter:brightness(1); } to{ filter:brightness(1.4); } }
+.stars.sad{ font-size:84px; letter-spacing:0; line-height:1.1; animation:sadDrop 1.2s ease-out both; }
+@keyframes sadDrop{ 0%{ transform:translateY(-40px) scale(.4); opacity:0; } 60%{ transform:translateY(6px) scale(1.1); opacity:1; } 100%{ transform:none; opacity:1; } }
+.block.clearing{ animation:clearPop .5s cubic-bezier(.2,.8,.3,1) forwards; z-index:20; will-change:transform,opacity; }
+@keyframes clearPop{
+  0%{ transform:scale(1) rotate(0deg); opacity:1; box-shadow:0 0 0 rgba(255,224,102,0);}
+  18%{ transform:scale(1.22) rotate(-3deg); opacity:1; box-shadow:0 0 10px 3px rgba(255,224,102,.75);}
+  45%{ transform:scale(1.25) rotate(2deg); opacity:.8;}
+  100%{ transform:scale(0) rotate(0deg); opacity:0;}
+}
+#board.shake{ animation:boardShake .5s ease; }
+@keyframes boardShake{
+  0%,100%{ transform:translate(0,0); }
+  15%{ transform:translate(-7px,4px) rotate(-0.6deg); }
+  30%{ transform:translate(6px,-5px) rotate(0.6deg); }
+  45%{ transform:translate(-5px,3px) rotate(-0.4deg); }
+  60%{ transform:translate(4px,-3px) rotate(0.4deg); }
+  75%{ transform:translate(-2px,2px); }
+}
+.flash-overlay{ position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:60; }
+.flash-overlay.show{ animation:flashOut .4s ease-out forwards; }
+@keyframes flashOut{ 0%{opacity:var(--flash-peak,.55);} 100%{opacity:0;} }
+.tray{ display:flex; gap:8px; justify-content:center; min-height:96px; align-items:center; }
+.tray-slot{ flex:1; max-width:118px; aspect-ratio:1.15; position:relative; }
+.tray-piece{ position:absolute; inset:0; cursor:grab; }
+.tray-piece.used{ visibility:hidden; }
+.combo-float{ position:fixed; z-index:80; font-family:'Baloo 2',sans-serif; font-weight:800; pointer-events:none;
+  text-shadow:0 3px 8px rgba(0,0,0,.4); opacity:0; }
+.combo-float.show{ animation:comboUp 1.3s ease-out forwards; }
+@keyframes comboUp{ 0%{opacity:0; transform:translate(-50%,-50%) scale(.5) rotate(-6deg);} 10%{opacity:1; transform:translate(-50%,-50%) scale(1.25) rotate(3deg);} 22%{transform:translate(-50%,-50%) scale(1.05) rotate(-2deg);} 80%{opacity:1; transform:translate(-50%,-120%) scale(1.1) rotate(0deg);} 100%{opacity:0; transform:translate(-50%,-190%) scale(1.1);} }
+.spark{ position:fixed; z-index:79; width:7px; height:7px; border-radius:50%; pointer-events:none; opacity:0; }
+.spark.show{ animation:sparkOut .7s cubic-bezier(.15,.7,.3,1) forwards; }
+@keyframes sparkOut{ 0%{opacity:1; transform:translate(0,0) scale(1);} 70%{opacity:1;} 100%{opacity:0; transform:var(--dxy) scale(.4);} }
+.confetti{ position:fixed; z-index:77; width:8px; height:13px; pointer-events:none; opacity:0; will-change:transform,opacity; }
+.confetti.show{ animation:confettiFall 1s ease-in forwards; }
+@keyframes confettiFall{ 0%{ opacity:1; transform:translateY(0) rotate(0deg);} 100%{ opacity:0; transform:translateY(240px) rotate(420deg);} }
+.bomb-ring{ position:fixed; z-index:78; width:20px; height:20px; margin-left:-10px; margin-top:-10px; border-radius:50%;
+  border:6px solid #ff6a00; opacity:0; pointer-events:none; transform:scale(.3); will-change:transform,opacity; }
+.bomb-ring.show{ animation:bombRing .5s ease-out forwards; }
+@keyframes bombRing{ 0%{ opacity:1; transform:scale(.3);} 100%{ opacity:0; transform:scale(7);} }
+.bomb-cell{ display:flex; align-items:center; justify-content:center; animation:bombPulse .9s ease-in-out infinite; }
+.bomb-label{ position:absolute; left:0; right:0; bottom:-2px; text-align:center; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:12px; letter-spacing:1px; color:#fff3b0; text-shadow:0 0 8px #ff6a00, 0 2px 4px rgba(0,0,0,.6); pointer-events:none; }
+@keyframes bombPulse{ 0%,100%{ transform:scale(1); box-shadow:0 0 0 0 rgba(255,106,0,.55), inset 0 -5px 0 rgba(0,0,0,.22), inset 0 3px 0 rgba(255,255,255,.3);} 50%{ transform:scale(1.1); box-shadow:0 0 22px 9px rgba(255,106,0,.85), inset 0 -5px 0 rgba(0,0,0,.22), inset 0 3px 0 rgba(255,255,255,.3);} }
+.ghost{ position:fixed; z-index:70; pointer-events:none; opacity:.92; }
+.ghost .block{ position:absolute; }
+.overlay{ position:fixed; inset:0; background:rgba(6,8,20,.65); display:flex; align-items:center; justify-content:center; padding:20px; z-index:90; }
+.overlay[hidden]{ display:none; }
+.modal{ background:var(--panel); border:2px solid var(--line); border-radius:20px; padding:24px; max-width:300px; width:100%; text-align:center; }
+.modal h2{ font-family:'Baloo 2',sans-serif; margin:0 0 8px; font-size:20px; }
+.stars{ font-size:30px; letter-spacing:4px; margin:6px 0 10px; }
+.modal p{ color:var(--muted); font-weight:700; font-size:13px; margin:0 0 14px; }
+.modal button{ appearance:none; border:none; border-radius:13px; padding:12px 16px; background:var(--accent); color:#3a2400;
+  font-family:'Baloo 2',sans-serif; font-weight:800; font-size:14px; width:100%; cursor:pointer; }
+.modal button.as-link{ background:none !important; box-shadow:none !important; color:#8da2ff !important; text-decoration:underline; font-size:15px; padding:8px 12px; }
+.modal button.as-link.faint{ opacity:.5; font-size:12px; padding:6px 10px; }
+.go-league{ background:rgba(0,0,0,.22); border-radius:12px; padding:10px 12px; margin:0 0 12px; font-size:13px; font-weight:800; color:var(--fg); line-height:1.5; }
+.go-league .gl-ch{ font-weight:800; }
+.go-league .gl-ch.up{ color:#4fe0a0; } .go-league .gl-ch.down{ color:#ff9a9a; } .go-league .gl-ch.same{ color:var(--muted); }
+.go-join{ position:relative; background:rgba(141,162,255,.14); border:1px dashed rgba(141,162,255,.55); border-radius:12px; padding:16px 12px 12px; margin:0 0 12px; }
+.go-join .go-join-t{ font-size:13px; font-weight:800; color:var(--fg); margin:0 14px 10px; line-height:1.4; }
+.modal button.go-x{ position:absolute; top:5px; right:5px; width:26px; height:26px; padding:0; border-radius:50%; background:rgba(255,255,255,.14); color:#fff; font-size:13px; line-height:26px; }
+.go-league[hidden], .go-join[hidden]{ display:none; }
+.ad-continue-btn{ background:linear-gradient(160deg,#4fe0a0,#18c98a) !important; color:#053323 !important; margin-bottom:10px; font-size:20px !important; padding:16px 18px !important; }
+.rankbtn{ display:flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:14px;
+  background:rgba(0,0,0,.22); border:1.5px solid rgba(255,255,255,.15); font-size:19px; cursor:pointer; appearance:none; color:inherit; }
+.rank-modal{ max-width:340px; text-align:left; max-height:80vh; display:flex; flex-direction:column; }
+.rank-modal h2{ text-align:center; }
+.rank-tabs{ display:flex; gap:8px; margin-bottom:12px; }
+.rank-tab{ flex:1; appearance:none; border:1.5px solid var(--line); background:transparent; color:var(--muted); border-radius:11px;
+  padding:9px 6px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13px; cursor:pointer; }
+.rank-tab.active{ background:var(--accent); color:#3a2400; border-color:var(--accent); }
+.rank-list{ overflow-y:auto; display:flex; flex-direction:column; gap:6px; margin-bottom:12px; min-height:120px; }
+.rank-row{ display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.05); border-radius:11px; padding:8px 10px; }
+.rank-row.me{ background:rgba(255,209,102,.18); box-shadow:inset 0 0 0 1.5px var(--accent); }
+.rank-row .num{ font-family:'Baloo 2',sans-serif; font-weight:800; width:22px; text-align:center; color:var(--muted); font-size:13px; }
+.rank-row .nm{ flex:1; font-weight:700; font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rank-row .sc{ font-family:'Baloo 2',sans-serif; font-weight:800; color:var(--accent); font-variant-numeric:tabular-nums; font-size:13.5px; }
+.league-head{ text-align:center; margin:-4px 0 10px; }
+.league-head .lg-name{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:20px; color:var(--accent); }
+.league-head .lg-sub{ font-size:11.5px; font-weight:700; color:var(--muted); }
+.rank-banner{ background:rgba(24,201,138,.15); border:1.5px solid var(--good); border-radius:11px; padding:8px 10px; font-size:12.5px; font-weight:700; text-align:center; }
+.rank-row.up .num,.rank-row.up .mk{ color:var(--good); }
+.rank-row.down .num,.rank-row.down .mk{ color:#ff6b6b; }
+.rank-row .mk{ width:14px; font-size:11px; font-weight:800; text-align:center; }
+.rank-empty{ text-align:center; color:var(--muted); font-weight:700; font-size:12.5px; padding:20px 0; }
+.name-row{ display:flex; gap:6px; margin-bottom:6px; }
+.name-row input{ flex:1; border-radius:10px; border:1.5px solid var(--line); background:rgba(0,0,0,.25); color:var(--fg);
+  padding:9px 11px; font-family:'Nunito',sans-serif; font-weight:700; font-size:13.5px; min-width:0; }
+.name-row input:focus{ outline:2px solid var(--accent); }
+.name-row button{ width:auto; flex:none; padding:9px 16px; font-size:13px; }
+.name-row select{ flex:none; max-width:96px; border-radius:10px; border:1.5px solid var(--line); background:rgba(0,0,0,.25); color:var(--fg);
+  padding:9px 6px; font-family:'Nunito',sans-serif; font-weight:700; font-size:12.5px; }
+.rank-close{ margin-top:2px; }
+.settings-modal{ max-width:340px; }
+.settings-modal h2{ margin-bottom:16px; }
+.set-row{ display:flex; justify-content:space-around; margin-bottom:6px; }
+.set-item{ display:flex; flex-direction:column; align-items:center; gap:8px; width:84px; }
+.set-toggle{ position:relative; width:56px; height:56px; border-radius:16px; background:rgba(0,0,0,.28); border:1.5px solid rgba(255,255,255,.14);
+  display:flex; align-items:center; justify-content:center; font-size:24px; cursor:pointer; appearance:none; color:var(--fg); }
+.set-toggle.off{ opacity:.4; }
+.set-toggle .dot{ position:absolute; top:-4px; right:-4px; width:14px; height:14px; border-radius:50%; background:#ff4757;
+  border:2px solid var(--panel); display:none; }
+.set-toggle.off .dot{ display:block; }
+.set-item .lbl{ font-weight:800; font-size:12.5px; color:var(--muted); }
+.vib-slider{ display:flex; align-items:center; gap:6px; margin-top:16px; }
+.vib-slider button{ width:26px; height:26px; border-radius:8px; padding:0; font-size:15px; line-height:1; flex:none; }
+.vib-slider input[type=range]{ flex:1; accent-color:var(--accent); }
+.boosters{ display:flex; justify-content:center; gap:14px; margin:2px 0 4px; }
+.boost-btn{ position:relative; width:52px; height:52px; border-radius:16px; background:rgba(0,0,0,.22);
+  border:1.5px solid rgba(255,255,255,.15); font-size:22px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; appearance:none; color:inherit; }
+.boost-btn.empty{ opacity:.55; }
+.boost-btn .cnt{ position:absolute; top:-6px; right:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:9px;
+  background:var(--accent); color:#3a2400; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:11px;
+  display:flex; align-items:center; justify-content:center; }
+.boost-btn .streak-tip{ position:absolute; bottom:-16px; left:50%; transform:translateX(-50%); font-size:9px; color:var(--muted); font-weight:800; white-space:nowrap; }
+.bgcell.hint{ box-shadow:inset 0 0 0 2px #4fe0a0; animation:hintPulse 1s ease-in-out infinite; }
+@keyframes hintPulse{ 0%,100%{ background:rgba(79,224,160,.12);} 50%{ background:rgba(79,224,160,.32);} }
+.ad-modal{ text-align:center; }
+.ad-spinner{ width:44px; height:44px; border-radius:50%; border:4px solid rgba(255,255,255,.2); border-top-color:var(--accent);
+  margin:0 auto 14px; animation:spin .8s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+<div class="app">
+  <div class="top">
+    <div class="levelchip"><span class="ico">👑</span><div class="v" id="levelVal">1</div></div>
+    <div class="score"><span class="ico">⭐</span><div class="v" id="hudScoreVal">0</div></div>
+    <button class="rankbtn" id="rankOpenBtn" data-i18n-title="rank" title="Sıralama">🏆</button>
+    <button class="rankbtn" id="settingsOpenBtn" data-i18n-title="settings" title="Ayarlar">⚙️</button>
+  </div>
+  <div class="bigscore" id="scoreVal">0</div>
+  <div class="board-wrap"><div id="board"></div></div>
+  <div class="boosters">
+    <button class="boost-btn" id="boostUndo" data-i18n-title="undo" title="Geri Al">🔙<span class="cnt" id="cntUndo">0</span></button>
+    <button class="boost-btn" id="boostShuffle" data-i18n-title="shuffle" title="Karıştır">🔀<span class="cnt" id="cntShuffle">0</span></button>
+    <button class="boost-btn" id="boostHint" data-i18n-title="hint" title="İpucu">💡<span class="cnt" id="cntHint">0</span></button>
+  </div>
+  <div class="tray" id="tray"></div>
+</div>
+<div class="overlay" id="dailyOverlay" hidden>
+  <div class="modal">
+    <h2 data-i18n="daily_title">🎁 Günlük Ödül!</h2>
+    <p id="dailyStreakText" style="margin-bottom:10px;"></p>
+    <p id="dailyRewardText"></p>
+    <button id="dailyBtn" data-i18n="daily_ok">Harika!</button>
+  </div>
+</div>
+<div class="overlay" id="howOverlay" hidden>
+  <div class="modal">
+    <h2 data-i18n="how_title">Nasıl Oynanır?</h2>
+    <p style="text-align:left;font-size:14px;color:#fff;" data-i18n="how_1"></p>
+    <p style="text-align:left;font-size:14px;color:#fff;" data-i18n="how_2"></p>
+    <p style="text-align:left;font-size:14px;color:#fff;" data-i18n="how_3"></p>
+    <button id="howBtn" data-i18n="how_ok">Anladım</button>
+  </div>
+</div>
+<div class="overlay" id="adOverlay" hidden>
+  <div class="modal ad-modal">
+    <h2 id="adTitle" data-i18n="ad_title">Hazırlanıyor…</h2>
+    <div class="ad-spinner"></div>
+    <p id="adText" data-i18n="ad_text">Ödülün birazdan gelecek</p>
+  </div>
+</div>
+<div class="overlay" id="overlay" hidden>
+  <div class="modal">
+    <h2 id="mTitle">Seviye Tamam!</h2>
+    <div class="stars" id="mStars"></div>
+    <p id="mText"></p>
+    <div class="go-league" id="goLeague" hidden></div>
+    <div class="go-join" id="goJoin" hidden>
+      <button id="goJoinX" class="go-x" aria-label="Close">✕</button>
+      <div class="go-join-t" data-i18n="go_join_t">Lige katıl, bu skor haftalık sıralamaya girsin!</div>
+      <button id="goJoinBtn" data-i18n="go_join_btn">Lige Katıl</button>
+    </div>
+    <button id="mAdBtn" class="ad-continue-btn" data-i18n="revive" hidden>Ücretsiz Canlan</button>
+    <button id="mBtn">Devam Et</button>
+  </div>
+</div>
+<div class="overlay" id="rankOverlay" hidden>
+  <div class="modal rank-modal">
+    <h2 data-i18n="lg_title">🏆 Lig</h2>
+    <div class="rank-tabs">
+      <button class="rank-tab active" id="tabLeague" data-i18n="tab_league">🏅 Lig</button>
+      <button class="rank-tab" id="tabGlobal" data-i18n="tab_global">🌍 Global</button>
+    </div>
+    <div class="league-head" id="leagueHead"></div>
+    <div class="rank-list" id="rankList"><div class="rank-empty" data-i18n="loading">Yükleniyor…</div></div>
+    <div class="name-row" id="nameRow" hidden>
+      <input id="nameInput" maxlength="16" data-i18n-ph="nick" placeholder="Rumuzun">
+      <select id="countrySelect"></select>
+      <button id="nameSaveBtn" data-i18n="join">Katıl</button>
+    </div>
+    <button class="rank-close" id="rankCloseBtn" data-i18n="close">Kapat</button>
+  </div>
+</div>
+<div class="overlay" id="settingsOverlay" hidden>
+  <div class="modal settings-modal">
+    <h2 data-i18n="settings">Ayarlar</h2>
+    <div class="set-row">
+      <div class="set-item">
+        <button class="set-toggle" id="toggleSound">🔊<span class="dot"></span></button>
+        <div class="lbl" data-i18n="sound">Ses</div>
+      </div>
+      <div class="set-item">
+        <button class="set-toggle" id="toggleBgm">🎵<span class="dot"></span></button>
+        <div class="lbl" data-i18n="music">Müzik</div>
+      </div>
+      <div class="set-item">
+        <button class="set-toggle" id="toggleVib">📳<span class="dot"></span></button>
+        <div class="lbl" data-i18n="vib">Titreşim</div>
+      </div>
+    </div>
+    <div class="vib-slider">
+      <button id="vibMinus">−</button>
+      <input type="range" id="vibRange" min="1" max="5" step="1" value="3">
+      <button id="vibPlus">+</button>
+    </div>
+    <button id="howOpenBtn" style="margin-top:14px;" data-i18n="how_btn">❓ Nasıl Oynanır?</button>
+    <button id="restartBtn" style="margin-top:10px; background:linear-gradient(160deg,#ff5d7d,#e2365a); color:#3a0012;" data-i18n="restart">🔄 Yeniden Başla</button>
+    <button id="langBtn" style="margin-top:10px;" data-i18n="lang_btn">🌐 English</button>
+    <button class="rank-close" id="settingsCloseBtn" style="margin-top:10px;" data-i18n="close">Kapat</button>
+  </div>
+</div>
+<script>
+(function(){
+"use strict";
+
+var LANG=(function(){ try{ var l=localStorage.getItem('renklibloklar_lang'); if (l==='tr'||l==='en') return l; }catch(e){} var n=(navigator.language||'en').toLowerCase(); return n.indexOf('tr')===0 ? 'tr' : 'en'; })();
+var TXT={
+ tr:{ rank:'Sıralama', settings:'Ayarlar', undo:'Geri Al', shuffle:'Karıştır', hint:'İpucu',
+  daily_title:'🎁 Günlük Ödül!', daily_ok:'Harika!', ad_title:'Hazırlanıyor…', ad_text:'Ödülün birazdan gelecek',
+  revive:'Ücretsiz Canlan (1 hak)', lg_title:'🏆 Lig', tab_league:'🏅 Lig', tab_global:'🌍 Global', loading:'Yükleniyor…',
+  nick:'Rumuzun', join:'Katıl', close:'Kapat', sound:'Ses', music:'Müzik', vib:'Titreşim', restart:'🔄 Yeniden Başla', lang_btn:'🌐 English', bomb:'BOMBA',
+  new_record:'Yeni Rekor! 🏆', no_moves:'Hamle Kalmadı', score_best:'Skor: {0} — En iyi: {1}', replay:'Yeniden Oyna', no_thanks:'Hayır, Teşekkürler',
+  reviving:'Canlanıyor…', revive_text:'Devam etme hakkın birazdan gelecek', reward_wait:'{0} ödülün birazdan gelecek',
+  lg_soon:'Ligler çok yakında!', lg_noconn:'Bağlantı kurulamadı. İnternetini kontrol edip tekrar dene.', connecting:'Bağlanıyor…',
+  lg_head:'🏆 Ligler ve Sıralama', lg_sub_join:'Rumuzunu ve ülkeni seç, katıl.',
+  lg_info:"Her oyunda kazandığın skor lig puanına eklenir. Haftanın ilk 5'i bir üst lige çıkar!",
+  res_up:'🎉 Geçen hafta {0}. oldun, <b>{1}</b> ligine yükseldin!', res_down:'Geçen hafta {0}. oldun, <b>{1}</b> ligine düştün. Bu hafta geri dön!', res_same:'Geçen hafta {0}. oldun, ligin değişmedi.',
+  week_left:'Hafta bitimine: {0}', not_played:'Bu hafta henüz oynamadın. Bir oyun bitir, ligine yerleştirileceksin!',
+  move_info:' · ilk {0} yükselir ▲, son {0} düşer ▼', world:'🌍 Dünya', alltime:'Tüm zamanların toplam puanı', nobody:'Henüz kimse yok — ilk sen ol!',
+  go_rank:'{0} · Sıran: <b>{1}.</b> / {2}', go_up:'▲ {0} basamak yükseldin', go_down:'▼ {0} basamak düştün', go_same:'Sıran değişmedi', go_join_t:'Lige katıl, bu skor haftalık sıralamaya girsin!', go_join_btn:'Lige Katıl',
+  streak:'🔥 {0}. gün üst üste!', other:'🌐 Diğer', d:'gün', h:'sa',
+  t_bronze:'Bronz', t_silver:'Gümüş', t_gold:'Altın', t_diamond:'Elmas', t_legend:'Efsane', t_champ:'Şampiyon',
+  how_title:'Nasıl Oynanır?', how_btn:'❓ Nasıl Oynanır?', how_ok:'Anladım',
+  how_1:'🧩 Alttaki parçaları sürükleyip tahtaya bırak.',
+  how_2:'💥 Bir satır ya da sütun tamamen dolunca patlar ve puan kazanırsın. Aynı anda birden çok satırı patlatırsan COMBO bonusu alırsın!',
+  how_3:'🔙 Geri Al, 🔀 Karıştır ve 💡 İpucu seni kurtarır. Hiçbir parça sığmayınca oyun biter.' },
+ en:{ rank:'Ranking', settings:'Settings', undo:'Undo', shuffle:'Shuffle', hint:'Hint',
+  daily_title:'🎁 Daily Reward!', daily_ok:'Awesome!', ad_title:'Getting ready…', ad_text:'Your reward is coming up',
+  revive:'Free Revive (1 left)', lg_title:'🏆 League', tab_league:'🏅 League', tab_global:'🌍 Global', loading:'Loading…',
+  nick:'Nickname', join:'Join', close:'Close', sound:'Sound', music:'Music', vib:'Vibration', restart:'🔄 Restart', lang_btn:'🌐 Türkçe', bomb:'BOMB',
+  new_record:'New Record! 🏆', no_moves:'No Moves Left', score_best:'Score: {0} — Best: {1}', replay:'Play Again', no_thanks:'No, Thanks',
+  reviving:'Reviving…', revive_text:'Your revive is coming up', reward_wait:'Your {0} reward is coming up',
+  lg_soon:'Leagues coming soon!', lg_noconn:'Could not connect. Check your internet and try again.', connecting:'Connecting…',
+  lg_head:'🏆 Leagues & Ranking', lg_sub_join:'Pick a nickname and country, then join.',
+  lg_info:"The score you earn each game is added to your league points. The top 5 each week move up a league!",
+  res_up:'🎉 You finished #{0} last week and moved up to <b>{1}</b>!', res_down:'You finished #{0} last week and dropped to <b>{1}</b>. Bounce back this week!', res_same:'You finished #{0} last week, your league stays the same.',
+  week_left:'Week ends in: {0}', not_played:"You haven't played this week. Finish a game to be placed in your league!",
+  move_info:' · top {0} move up ▲, bottom {0} move down ▼', world:'🌍 World', alltime:'All-time total points', nobody:'Nobody here yet — be the first!',
+  go_rank:'{0} · Your rank: <b>#{1}</b> of {2}', go_up:'▲ Up {0} places', go_down:'▼ Down {0} places', go_same:'Rank unchanged', go_join_t:'Join the league and put this score on the weekly ranking!', go_join_btn:'Join League',
+  streak:'🔥 Day {0} in a row!', other:'🌐 Other', d:'d', h:'h',
+  t_bronze:'Bronze', t_silver:'Silver', t_gold:'Gold', t_diamond:'Diamond', t_legend:'Legend', t_champ:'Champion',
+  how_title:'How to Play', how_btn:'❓ How to Play', how_ok:'Got it',
+  how_1:'🧩 Drag the pieces from the bottom onto the board.',
+  how_2:'💥 Fill a whole row or column to clear it and score points. Clear several lines at once for a COMBO bonus!',
+  how_3:'🔙 Undo, 🔀 Shuffle and 💡 Hint can save you. The game ends when no piece fits.' }
+};
+function tx(k){ var s=(TXT[LANG]&&TXT[LANG][k]); if (s==null) s=TXT.tr[k]; for (var i=1;i<arguments.length;i++) s=s.split('{'+(i-1)+'}').join(arguments[i]); return s; }
+function applyLang(){
+  document.documentElement.lang=LANG;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function(e){ e.textContent=tx(e.getAttribute('data-i18n')); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-ph]'), function(e){ e.placeholder=tx(e.getAttribute('data-i18n-ph')); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-title]'), function(e){ e.title=tx(e.getAttribute('data-i18n-title')); });
+}
+applyLang();
+var N=8, boardEl=document.getElementById('board'), trayEl=document.getElementById('tray');
+var levelVal=document.getElementById('levelVal'), scoreVal=document.getElementById('scoreVal'), hudScoreVal=document.getElementById('hudScoreVal');
+var goLeagueEl=document.getElementById('goLeague'), goJoinEl=document.getElementById('goJoin');
+var overlay=document.getElementById('overlay'), mTitle=document.getElementById('mTitle'), mStars=document.getElementById('mStars'), mText=document.getElementById('mText'), mBtn=document.getElementById('mBtn'), mAdBtn=document.getElementById('mAdBtn');
+
+// bloklar rengarenk kalıyor — skor arttıkça palet genişliyor (yeni renkler ekleniyor)
+var GEM_STAGES=[
+  { min:0, colors:[
+    {c1:'#ff3366',c2:'#ff0033'}, {c1:'#33bbff',c2:'#0099ff'}, {c1:'#ffee00',c2:'#ffd000'},
+    {c1:'#33ff99',c2:'#00e673'}, {c1:'#d633ff',c2:'#b800ff'}
+  ]},
+  { min:2000, colors:[
+    {c1:'#00fff0',c2:'#00c2b8'}, {c1:'#ff5100',c2:'#d94300'}
+  ]},
+  { min:4000, colors:[
+    {c1:'#ffd700',c2:'#c9a500'}, {c1:'#9d4dff',c2:'#6a1fc9'}
+  ]},
+  { min:6500, colors:[
+    {c1:'#ff4da6',c2:'#c9007c'}, {c1:'#7cff00',c2:'#5ecf00'}
+  ]}
+];
+function unlockedStageIndex(s){
+  var idx=0;
+  for (var i=0;i<GEM_STAGES.length;i++){ if (s>=GEM_STAGES[i].min) idx=i; }
+  return idx;
+}
+function unlockedGems(s){
+  var out=[];
+  for (var i=0;i<=unlockedStageIndex(s);i++) out=out.concat(GEM_STAGES[i].colors);
+  return out;
+}
+var GEMS=GEM_STAGES[0].colors;
+var seenStage=0;
+
+// tahtanın VE kenarların (sayfa arka planının) rengi — skor arttıkça şu anki lacivertten başlayıp
+// belirgin şekilde açılıyor. Sabit az sayıda aşama yerine PROSEDÜREL (sonsuz) bir sistem: skor ne kadar
+// yükselirse yükselsin (milyarlara kadar) her ~1500 puanda yeni, farklı bir renk aşamasına geçiyor.
+var BOARD_STEP=1500;
+function hslToHex(h,s,l){
+  s/=100; l/=100;
+  var c=(1-Math.abs(2*l-1))*s, x=c*(1-Math.abs((h/60)%2-1)), m=l-c/2, r=0,g=0,b=0;
+  if (h<60){r=c;g=x;b=0;} else if (h<120){r=x;g=c;b=0;} else if (h<180){r=0;g=c;b=x;}
+  else if (h<240){r=0;g=x;b=c;} else if (h<300){r=x;g=0;b=c;} else {r=c;g=0;b=x;}
+  var toHex=function(v){ var n=Math.round((v+m)*255); return n.toString(16).padStart(2,'0'); };
+  return '#'+toHex(r)+toHex(g)+toHex(b);
+}
+function boardColorsForScore(score){
+  var stage=Math.floor(score/BOARD_STEP);
+  if (stage<=0) return {board:'#232d63', bg1:'#5f78d9', bg2:'#3a4fac'};
+  var hue=(228 + stage*47) % 360;           // her aşamada belirgin bir sıçrama (altın açı benzeri, aynı tona kolay dönmüyor)
+  var cycle=Math.floor(stage/8);             // ~8 aşamada bir doygunluk/parlaklık da değişsin, çok uzun oyunlarda tekdüze olmasın
+  var sat=58 + (cycle%3)*9;                  // 58 / 67 / 76
+  var boardL=22 + (cycle%2)*5;               // 22 / 27 — koyu, tahta zemini gibi
+  return {
+    board: hslToHex(hue, sat, boardL),
+    bg1: hslToHex(hue, Math.min(sat+14,88), 60),
+    bg2: hslToHex(hue, Math.min(sat+14,88), 40)
+  };
+}
+var boardSeenStage=0;
+function unlockedBoardIndex(s){ return Math.floor(s/BOARD_STEP); }
+var bgFadeEl=null;
+function applyBoardColor(score){
+  var c=boardColorsForScore(score);
+  boardEl.style.background=c.board;
+  if (!bgFadeEl){
+    bgFadeEl=document.createElement('div');
+    bgFadeEl.style.cssText='position:fixed;inset:0;z-index:-1;opacity:0;transition:opacity 1.4s ease;pointer-events:none;';
+    document.body.appendChild(bgFadeEl);
+  }
+  bgFadeEl.style.background='linear-gradient(180deg,'+c.bg1+','+c.bg2+')';
+  void bgFadeEl.offsetWidth;
+  bgFadeEl.style.opacity='1';
+  // asıl body arka planını, üstteki katman tamamen görünür hale gelip onu kapattıktan SONRA değiştir —
+  // yoksa anlık sıçrama üsteki saydam katmanın arkasından hemen görünür, yumuşak geçiş bozulur.
+  setTimeout(function(){
+    document.documentElement.style.setProperty('--bg1', c.bg1);
+    document.documentElement.style.setProperty('--bg2', c.bg2);
+    bgFadeEl.style.opacity='0';
+  }, 1420);
+}
+var SHAPES=[
+  // tekli / ikili
+  [[0,0]],
+  [[0,0],[0,1]], [[0,0],[1,0]],
+  // çapraz ikili (merdiven, 2 yön) — kullanıcının attığı referans oyunda var, bizde eksikti
+  [[0,0],[1,1]], [[0,1],[1,0]],
+  // çapraz üçlü (merdiven, 2 yön)
+  [[0,0],[1,1],[2,2]], [[0,2],[1,1],[2,0]],
+  // düz üçlü (I-tromino)
+  [[0,0],[0,1],[0,2]], [[0,0],[1,0],[2,0]],
+  // köşeli üçlü (L-tromino, 4 yön)
+  [[0,0],[0,1],[1,0]], [[0,0],[0,1],[1,1]], [[0,0],[1,0],[1,1]], [[0,1],[1,0],[1,1]],
+  // kare (O-tetromino)
+  [[0,0],[0,1],[1,0],[1,1]],
+  // düz dörtlü (I-tetromino)
+  [[0,0],[0,1],[0,2],[0,3]], [[0,0],[1,0],[2,0],[3,0]],
+  // L/J tetromino - yatay (4 yön)
+  [[0,0],[0,1],[0,2],[1,0]], [[0,0],[0,1],[0,2],[1,2]],
+  [[0,0],[1,0],[1,1],[1,2]], [[0,2],[1,0],[1,1],[1,2]],
+  // L/J tetromino - dikey (4 yön)
+  [[0,0],[1,0],[2,0],[0,1]], [[0,0],[1,0],[2,0],[2,1]],
+  [[0,1],[1,1],[2,1],[0,0]], [[0,1],[1,1],[2,1],[2,0]],
+  // T-tetromino (4 yön)
+  [[0,0],[0,1],[0,2],[1,1]], [[1,0],[1,1],[1,2],[0,1]],
+  [[0,0],[1,0],[2,0],[1,1]], [[0,1],[1,0],[1,1],[2,1]],
+  // S/Z tetromino
+  [[0,0],[0,1],[1,1],[1,2]], [[0,1],[0,2],[1,0],[1,1]],
+  [[0,0],[1,0],[1,1],[2,1]], [[0,1],[1,0],[1,1],[2,0]],
+  // dikdörtgenler (2x3 / 3x2)
+  [[0,0],[0,1],[1,0],[1,1],[0,2],[1,2]],
+  [[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],
+  // artı (pentomino) ve uzun beşli
+  [[0,1],[1,0],[1,1],[1,2],[2,1]],
+  [[0,0],[0,1],[0,2],[0,3],[0,4]], [[0,0],[1,0],[2,0],[3,0],[4,0]],
+  // U-pentomino (4 yön) — diğer blok oyunlarında sık görülen, bizde eksikti
+  [[0,0],[0,2],[1,0],[1,1],[1,2]], [[0,0],[0,1],[0,2],[1,0],[1,2]],
+  [[0,0],[0,1],[1,1],[2,0],[2,1]], [[0,0],[0,1],[1,0],[2,0],[2,1]],
+  // büyük L-pentomino (4 yön)
+  [[0,0],[1,0],[2,0],[3,0],[3,1]], [[0,0],[1,0],[2,0],[3,0],[0,1]],
+  [[0,0],[0,1],[0,2],[0,3],[1,0]], [[0,0],[0,1],[0,2],[0,3],[1,3]],
+  // V-pentomino (iki kolu eşit, 3+3 köşe paylaşımlı, 4 yön) — referans oyunda vardı, bizde eksikti
+  [[0,0],[1,0],[2,0],[2,1],[2,2]], [[0,2],[1,2],[2,0],[2,1],[2,2]],
+  [[0,0],[0,1],[0,2],[1,0],[2,0]], [[0,0],[0,1],[0,2],[1,2],[2,2]],
+  // Z/S-pentomino (zikzak beşli)
+  [[0,0],[0,1],[1,1],[2,1],[2,2]], [[0,1],[0,2],[1,1],[2,0],[2,1]],
+  // P-pentomino (2x2 kare + çıkıntı, 4 yön)
+  [[0,0],[0,1],[1,0],[1,1],[2,0]], [[0,0],[0,1],[1,0],[1,1],[2,1]],
+  [[0,0],[0,1],[1,0],[1,1],[-1,0]].map(function(p){return [p[0]+1,p[1]];}),
+  [[0,0],[0,1],[1,0],[1,1],[-1,1]].map(function(p){return [p[0]+1,p[1]];}),
+  // büyük 3x3 bonus parça
+  [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]
+];
+var cellSize, gap=0, PAD=4;
+var grid, score, best=0, over, dragging=false, recordBeaten=false, continuedThisGame=false;
+// şekiller uzunluğa göre kategorilere ayrılıyor; zorluk kategori AĞIRLIĞIYLA kontrol ediliyor
+// (kategori içindeki şekil SAYISI ağırlığı etkilemiyor — çok rotasyonlu T/L/J parçaları yüzünden
+// tetromino kategorisi orantısız kalabalıklaşmasın diye)
+var SHAPE_CATS=(function(){
+  var cats={small:[],tromino:[],tetromino:[],penta:[],big:[]};
+  SHAPES.forEach(function(s){
+    if (s.length<=2) cats.small.push(s);
+    else if (s.length===3) cats.tromino.push(s);
+    else if (s.length===4) cats.tetromino.push(s);
+    else if (s.length===5) cats.penta.push(s);
+    else cats.big.push(s);
+  });
+  return cats;
+})();
+function pickWeightedShape(s){
+  var score=s||0;
+  // zorluk eğrisi çok daha uzun bir "kolay" dönem versin (15000 puana kadar yavaş yavaş zorlaşsın,
+  // eskiden 8000'de tam zora ulaşıyordu) — oyun ilk başlarda uzun süre akıcı/hızlı hissettirsin.
+  // üstüne üstlük eğriyi (^1.4) büktük: başlarda t çok daha yavaş yükseliyor, yani oyunun İLK bölümü
+  // eskisinden de kolay kalıyor, zorluk ancak oyunun sonlarına doğru asıl hızlanıyor.
+  var t=Math.pow(Math.min(1, score/40000), 1.7); // 0 = oyun başı (çok kolay), 1 = ileri seviye (zor) — "hala çok zor" geri bildirimi üzerine eğri ciddi uzatıldı
+  // not: "small" kategorisinde çok az şekil var (tekli/ikili), eskiden ağırlığı çok yüksekti (%52) —
+  // bu da "hep aynı şekil geliyor" hissi veriyordu. Dengelendi ama kolaylık için yine de small/tromino ağırlıklı.
+  var w={ small:42-10*t, tromino:36-6*t, tetromino:16+9*t, penta:4+4*t, big:1+2*t };
+  // oyunun en başında (skor 3500 altı) büyük/zor parçalar hiç gelmesin — tamamen küçük/basit parçalarla başlasın
+  if (score<3500){ w.penta=0; w.big=0; }
+  var total=0; for (var k in w) total+=w[k];
+  var r=Math.random()*total, cat=null;
+  for (var k2 in w){ if (r<w[k2]){ cat=k2; break; } r-=w[k2]; }
+  var arr=SHAPE_CATS[cat];
+  return arr[Math.floor(Math.random()*arr.length)];
+}
+function guaranteedSlotCount(s){
+  // "hala çok zor, ilerleyemiyorum" geri bildirimi üzerine: tepsideki 3 parçanın HEPSİ artık
+  // çok daha uzun süre (35000 puana kadar) ayrı ayrı yerleştirilebilir garantili geliyor —
+  // tahtanın kilitlenip oyunun aniden bitmesi ihtimali büyük ölçüde azaltıldı.
+  if ((s||0)<35000) return 3;
+  return 2;
+}
+
+function loadBest(){ try{ var v=localStorage.getItem('renklibloklar_best'); return v?parseInt(v,10):0; }catch(e){ return 0; } }
+function saveBest(){ try{ localStorage.setItem('renklibloklar_best', String(best)); }catch(e){} }
+
+function freshGrid(){ var g=[]; for (var r=0;r<N;r++) g.push(new Array(N).fill(null)); return g; }
+function newGame(){
+  if (typeof flushScore==='function') flushScore();
+  lastFlushedScore=0;
+  try{ localStorage.removeItem('renklibloklar_save'); }catch(e){}
+  grid=freshGrid(); score=0; over=false; recordBeaten=false; seenStage=0; boardSeenStage=0; continuedThisGame=false;
+  undoSnapshot=null; resolving=false;
+  applyBoardColor(0);
+  best=loadBest();
+  levelVal.textContent=best; scoreVal.textContent='0'; hudScoreVal.textContent='0';
+  overlay.hidden=true;
+  measure(); layoutBg(); renderGrid();
+  fillTray();
+  if (typeof daily!=='undefined' && typeof refreshBoosterUI==='function') refreshBoosterUI();
+}
+var boardWrapEl=document.querySelector('.board-wrap');
+function sizeBoard(){
+  // tahta hem genişliğe hem yüksekliğe sığmalı; sadece genişliğe göre kare olursa
+  // dar/kısa ekranlarda taşıp skorun ve booster satırının üzerine biniyor
+  var w=boardWrapEl.clientWidth, h=boardWrapEl.clientHeight;
+  var size=Math.max(120, Math.min(w, h, 460));
+  boardEl.style.width=size+'px';
+  boardEl.style.height=size+'px';
+}
+function measure(){ sizeBoard(); cellSize=(boardEl.clientWidth-PAD*2)/N; }
+function cellRect(r,c){ return { x:PAD+c*cellSize, y:PAD+r*cellSize }; }
+function layoutBg(){
+  boardEl.querySelectorAll('.bgcell').forEach(function(e){e.remove();});
+  for (var r=0;r<N;r++) for (var c=0;c<N;c++){
+    var p=cellRect(r,c); var bg=document.createElement('div'); bg.className='bgcell'; bg.id='bg-'+r+'-'+c;
+    bg.style.width=cellSize+'px'; bg.style.height=cellSize+'px'; bg.style.left=p.x+'px'; bg.style.top=p.y+'px';
+    boardEl.appendChild(bg);
+  }
+}
+function renderGrid(){
+  boardEl.querySelectorAll('.block').forEach(function(e){e.remove();});
+  for (var r=0;r<N;r++) for (var c=0;c<N;c++){
+    var cell=grid[r][c]; if (!cell) continue;
+    var p=cellRect(r,c); var b=document.createElement('div'); b.className='block'; b.id='blk-'+r+'-'+c;
+    b.style.width=cellSize+'px'; b.style.height=cellSize+'px'; b.style.left=p.x+'px'; b.style.top=p.y+'px';
+    b.style.background='linear-gradient(160deg,'+cell.c1+','+cell.c2+')';
+    b.dataset.color=cell.c1;
+    boardEl.appendChild(b);
+  }
+}
+var trayPieces=[];
+function randomPiece(forcePlaceable){
+  var shape;
+  if (forcePlaceable){
+    var tries=0;
+    do { shape=pickWeightedShape(score||0); tries++; }
+    while (!canPlaceAnywhere(shape) && tries<30);
+    if (!canPlaceAnywhere(shape)) shape=SHAPES[0];
+  } else {
+    shape=pickWeightedShape(score||0);
+  }
+  var pool=unlockedGems(score||0);
+  var gem=pool[Math.floor(Math.random()*pool.length)];
+  return {shape:shape, gem:gem, used:false};
+}
+var BOMB_GEM={c1:'#ff9d00',c2:'#d41f00'};
+function makeBombPiece(){ return {shape:[[0,0]], gem:BOMB_GEM, used:false, isBomb:true}; }
+function fillTray(){
+  var gcount=guaranteedSlotCount(score||0);
+  trayPieces=[randomPiece(0<gcount), randomPiece(1<gcount), randomPiece(2<gcount)];
+  var hadColorUnlock=!!pendingUnlockColors;
+  if (pendingUnlockColors){
+    trayPieces[0].gem=pendingUnlockColors[Math.floor(Math.random()*pendingUnlockColors.length)];
+    pendingUnlockColors=null;
+  }
+  if (pendingBombPiece){
+    trayPieces[hadColorUnlock?1:0]=makeBombPiece();
+    pendingBombPiece=false;
+  }
+  renderTray();
+  checkNoMoves();
+}
+function shapeBounds(shape){
+  var maxR=0,maxC=0; shape.forEach(function(p){ if(p[0]>maxR)maxR=p[0]; if(p[1]>maxC)maxC=p[1]; }); return {rows:maxR+1, cols:maxC+1};
+}
+function renderTray(){
+  trayEl.innerHTML='';
+  trayPieces.forEach(function(piece,idx){
+    var slot=document.createElement('div'); slot.className='tray-slot';
+    var pieceEl=document.createElement('div'); pieceEl.className='tray-piece'+(piece.used?' used':'');
+    var b=shapeBounds(piece.shape);
+    var mini=Math.min(22, 96/Math.max(b.rows,b.cols));
+    if (piece.isBomb) mini=54; // bomba tepside çok daha büyük ve dikkat çekici görünsün
+    var totalW=b.cols*mini, totalH=b.rows*mini;
+    var offX=(slot.clientWidth||100)/2 - totalW/2, offY=48-totalH/2;
+    piece.shape.forEach(function(p){
+      var d=document.createElement('div'); d.style.position='absolute';
+      d.style.width=(mini-3)+'px'; d.style.height=(mini-3)+'px';
+      d.style.left=(offX+p[1]*mini)+'px'; d.style.top=(offY+p[0]*mini)+'px';
+      d.style.borderRadius='4px'; d.style.background='linear-gradient(160deg,'+piece.gem.c1+','+piece.gem.c2+')';
+      d.style.border='2px solid #000';
+      d.style.boxShadow='inset 0 -2px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.5)';
+      if (piece.isBomb){ d.className='bomb-cell'; d.style.fontSize=(mini*0.72)+'px'; d.style.borderRadius='14px'; d.style.border='3px solid #fff3b0'; d.textContent='💣'; }
+      pieceEl.appendChild(d);
+    });
+    if (piece.isBomb && !piece.used){ var lb=document.createElement('div'); lb.className='bomb-label'; lb.textContent=tx('bomb'); pieceEl.appendChild(lb); }
+    if (!piece.used) attachPieceDrag(pieceEl, piece, idx, mini);
+    slot.appendChild(pieceEl); trayEl.appendChild(slot);
+  });
+}
+var noMovesTimer=null;
+function movesLeft(){
+  var avail=trayPieces.filter(function(p){return !p.used;});
+  return !avail.length || avail.some(function(p){ return canPlaceAnywhere(p.shape); });
+}
+/* Satır/bomba temizlenirken (resolving) tahtada dolu satırlar henüz silinmemiş olur; o anda bakarsak
+   yer olduğu halde "hamle kalmadı" deriz. Bu yüzden temizleme bitene kadar bekle ve bitirmeden önce tekrar doğrula. */
+function checkNoMoves(){
+  if (over) return;
+  clearTimeout(noMovesTimer);
+  if (resolving){ noMovesTimer=setTimeout(checkNoMoves, 120); return; }
+  if (movesLeft()) return;
+  noMovesTimer=setTimeout(function(){
+    if (over) return;
+    if (resolving){ checkNoMoves(); return; }
+    if (!movesLeft()) gameOverNoMoves();
+  }, 250);
+}
+function canPlaceAnywhere(shape){
+  for (var r=0;r<N;r++) for (var c=0;c<N;c++){ if (canPlace(shape,r,c)) return true; }
+  return false;
+}
+function canPlace(shape,r0,c0){
+  for (var i=0;i<shape.length;i++){
+    var r=r0+shape[i][0], c=c0+shape[i][1];
+    if (r<0||r>=N||c<0||c>=N||grid[r][c]) return false;
+  }
+  return true;
+}
+var goStage=1, goRankInfo=null, goRankLoading=false;
+function gameOverNoMoves(){
+  over=true;
+  try{ localStorage.removeItem('renklibloklar_save'); }catch(e){}
+  flushScore();
+  mTitle.textContent = recordBeaten ? tx('new_record') : tx('no_moves');
+  mStars.textContent = recordBeaten ? '' : '😢';
+  mStars.className = 'stars' + (recordBeaten ? '' : ' sad');
+  if (recordBeaten) playJingle([523,659,784,1047], 0.09, 'square', 0.14);
+  else playJingle([392,349,330,262], 0.7, 'triangle', 0.14); // üzgün, alçalan ~2 sn'lik kısa melodi
+  mText.textContent=tx('score_best',score,best);
+  goStage = continuedThisGame ? 2 : 1;
+  goRankInfo=null; goRankLoading=true;
+  applyGoStage();
+  overlay.hidden=false;
+  if (typeof startGoRank==='function') startGoRank();
+}
+/* Oyun sonu iki aşamalı: 1) Canlan / soluk "Hayır, Teşekkürler"  2) sonuç kartı (skor + lig sıralaması + katıl) */
+function applyGoStage(){
+  var st2 = goStage===2;
+  mAdBtn.hidden = st2 || continuedThisGame;
+  mBtn.textContent = st2 ? tx('replay') : tx('no_thanks');
+  mBtn.classList.toggle('as-link', !st2);
+  mBtn.classList.toggle('faint', !st2);
+  if (!st2){ goLeagueEl.hidden=true; goJoinEl.hidden=true; return; }
+  renderGoResult();
+}
+function continueAfterAd(){
+  continuedThisGame=true;
+  var avail=trayPieces.filter(function(p){return !p.used;});
+  var tries=0;
+  while (tries<60 && !avail.some(function(p){return canPlaceAnywhere(p.shape);})){
+    var r=Math.floor(Math.random()*N), c=Math.floor(Math.random()*N);
+    for (var dr=-1;dr<=1;dr++) for (var dc=-1;dc<=1;dc++){
+      var rr=r+dr, cc=c+dc;
+      if (rr>=0&&rr<N&&cc>=0&&cc<N) grid[rr][cc]=null;
+    }
+    tries++;
+  }
+  renderGrid();
+  over=false;
+  overlay.hidden=true;
+  checkNoMoves();
+}
+function floatCombo(x,y,text,color,big){
+  var el=document.createElement('div'); el.className='combo-float'; el.textContent=text;
+  el.style.left=x+'px'; el.style.top=y+'px'; el.style.color=color;
+  el.style.fontSize=(big?'30px':'22px');
+  el.style.textShadow='0 0 14px '+color+', 0 3px 8px rgba(0,0,0,.5)';
+  document.body.appendChild(el); requestAnimationFrame(function(){el.classList.add('show');});
+  setTimeout(function(){el.remove();},920);
+}
+var SPARK_COLORS=['#ffe066','#ffd166','#fff3b0','#ffb300','#ff9d3d'];
+function burstSpark(x,y,color,intensity){
+  // performans için: daha az kıvılcım, box-shadow (blur) yok — çok sayıda blur'lu eleman kasmaya sebep oluyordu
+  var n=Math.round(6*Math.min(1.3,(intensity||1)));
+  for (var i=0;i<n;i++){
+    var s=document.createElement('div'); s.className='spark';
+    var useGold=Math.random()<0.7;
+    s.style.background= useGold ? SPARK_COLORS[Math.floor(Math.random()*SPARK_COLORS.length)] : color;
+    var size=(useGold ? (5+Math.random()*5) : 6) * Math.min(1.3,(intensity||1));
+    s.style.width=size+'px'; s.style.height=size+'px';
+    var ang=Math.random()*Math.PI*2, dist=(40+Math.random()*55)*Math.min(1.3,(intensity||1));
+    s.style.left=x+'px'; s.style.top=y+'px';
+    s.style.setProperty('--dxy','translate('+(Math.cos(ang)*dist)+'px,'+(Math.sin(ang)*dist+40)+'px)');
+    document.body.appendChild(s);
+    requestAnimationFrame(function(el){return function(){el.classList.add('show');};}(s));
+    setTimeout(function(el){return function(){el.remove();};}(s),750);
+  }
+}
+var flashEl=document.createElement('div'); flashEl.className='flash-overlay'; document.body.appendChild(flashEl);
+function screenFlash(intensity){ flashEl.style.opacity=''; flashEl.classList.remove('show'); void flashEl.offsetWidth; flashEl.style.setProperty('--flash-peak', (intensity==null?1:intensity)*0.55); flashEl.classList.add('show'); }
+function shakeBoard(){ boardEl.classList.remove('shake'); void boardEl.offsetWidth; boardEl.classList.add('shake'); }
+// cafcaflı ama ucuz (sadece transform/opacity) ek efektler: konfeti + kuş bonusu + bomba patlaması
+var CONFETTI_COLORS=['#ff3366','#33bbff','#ffd166','#33ff99','#d633ff','#ff9933'];
+function confettiBurst(cx, topY){
+  var n=12;
+  for (var i=0;i<n;i++){
+    var el=document.createElement('div'); el.className='confetti';
+    el.style.background=CONFETTI_COLORS[Math.floor(Math.random()*CONFETTI_COLORS.length)];
+    el.style.borderRadius=Math.random()<0.5?'50%':'2px';
+    el.style.left=(cx + (Math.random()*220-110))+'px';
+    el.style.top=topY+'px';
+    document.body.appendChild(el);
+    requestAnimationFrame(function(e){return function(){e.classList.add('show');};}(el));
+    setTimeout(function(e){return function(){e.remove();};}(el),1100);
+  }
+}
+function bombBurst(x,y){
+  var ring=document.createElement('div'); ring.className='bomb-ring';
+  ring.style.left=x+'px'; ring.style.top=y+'px';
+  document.body.appendChild(ring);
+  requestAnimationFrame(function(){ring.classList.add('show');});
+  setTimeout(function(){ring.remove();},520);
+  burstSpark(x,y,'#ff6a00',1.6);
+}
+function sfxBomb(){
+  beep(80,0.4,'sine',0.26);
+  setTimeout(function(){ beep(55,0.3,'triangle',0.18); }, 70);
+  noiseBurst(0.28, 0.2, 900);
+  if (typeof voiceCallout==='function') voiceCallout(3);
+}
+var undoSnapshot=null, resolving=false;
+function placePiece(piece, r0, c0){
+  undoSnapshot={ grid:JSON.parse(JSON.stringify(grid)), score:score, trayPieces:JSON.parse(JSON.stringify(trayPieces)) };
+  refreshBoosterUI();
+  if (piece.isBomb){
+    piece.used=true;
+    sfxPlace(); vibrate(vibLevelMs());
+    renderTray();
+    triggerBombExplosion(r0, c0);
+    return;
+  }
+  piece.shape.forEach(function(p){ grid[r0+p[0]][c0+p[1]]={c1:piece.gem.c1,c2:piece.gem.c2}; });
+  piece.used=true;
+  score += piece.shape.length*5; // puan almak hızlı/kolay hissettirsin diye artırıldı
+  sfxPlace(); vibrate(vibLevelMs());
+  renderGrid(); renderTray();
+  setTimeout(function(){ resolveLines(); }, 60);
+}
+function triggerBombExplosion(r0, c0){
+  resolving=true;
+  var cleared=[];
+  for (var dr=-1;dr<=1;dr++) for (var dc=-1;dc<=1;dc++){
+    var r=r0+dr, c=c0+dc;
+    if (r>=0&&r<N&&c>=0&&c<N) cleared.push(r+'-'+c);
+  }
+  var pos=cellRect(r0,c0);
+  var rect=boardEl.getBoundingClientRect();
+  bombBurst(rect.left+pos.x+cellSize/2, rect.top+pos.y+cellSize/2);
+  shakeBoard(); screenFlash(); sfxBomb();
+  cleared.forEach(function(key){ var el=document.getElementById('blk-'+key); if (el) el.classList.add('clearing'); });
+  var bonus=cleared.length*15;
+  score += bonus;
+  setTimeout(function(){
+    floatCombo(rect.left+rect.width/2, rect.top+rect.height*0.35, '💣 +'+bonus, '#ff6a00', true);
+  }, 120);
+  setTimeout(function(){
+    cleared.forEach(function(key){ var parts=key.split('-'); grid[+parts[0]][+parts[1]]=null; });
+    renderGrid(); updateScoreDisplay();
+    resolving=false; refreshBoosterUI();
+    resolveLines();
+  }, 460);
+}
+function resolveLines(){
+  var fullRows=[], fullCols=[];
+  for (var r=0;r<N;r++){ if (grid[r].every(function(c){return c;})) fullRows.push(r); }
+  for (var c=0;c<N;c++){ var full=true; for (var r=0;r<N;r++) if (!grid[r][c]) full=false; if (full) fullCols.push(c); }
+  var totalLines=fullRows.length+fullCols.length;
+  if (totalLines>0){
+    resolving=true;
+    var cellsToClear=new Set();
+    fullRows.forEach(function(r){ for (var c=0;c<N;c++) cellsToClear.add(r+'-'+c); });
+    fullCols.forEach(function(c){ for (var r=0;r<N;r++) cellsToClear.add(r+'-'+c); });
+    var rect=boardEl.getBoundingClientRect();
+    var intensity = 1 + (totalLines-1)*0.35;
+    var keys=Array.from(cellsToClear);
+    keys.forEach(function(key){ var el=document.getElementById('blk-'+key); if (el) el.classList.add('clearing'); });
+    shakeBoard();
+    screenFlash(totalLines>1 ? 1 : 0.4); // tek satırda da hafif bir parlama olsun, tamamen sessiz/sönük kalmasın
+    if (totalLines>1){ confettiBurst(rect.left+rect.width/2, rect.top-20); }
+    if (score>=3000 && (totalLines>=2 || Math.random()<0.2) && !trayPieces.some(function(p){return p.isBomb && !p.used;})){
+      pendingBombPiece=true;
+      var unusedForBomb=[]; trayPieces.forEach(function(p,i){ if(!p.used && !p.isBomb) unusedForBomb.push(i); });
+      if (unusedForBomb.length){
+        var bombIdx=unusedForBomb[Math.floor(Math.random()*unusedForBomb.length)];
+        trayPieces[bombIdx]=makeBombPiece();
+        pendingBombPiece=false;
+        renderTray();
+      }
+    }
+    // patlamalar tek seferde değil, dalga dalga (soldan sağa/yukarıdan aşağı) ağırdan patlasın
+    keys.sort(function(a,b){
+      var pa=a.split('-').map(Number), pb=b.split('-').map(Number);
+      return (pa[0]+pa[1]) - (pb[0]+pb[1]);
+    });
+    var waveSpan=340; // ms - tüm dalganın yayılma süresi
+    // performans: çok sayıda hücre aynı anda patlarken (çoklu satır/sütun) her hücreye kıvılcım koymak kasmaya sebep oluyordu.
+    // en fazla ~18 hücreye kıvılcım koy, geri kalanlar sadece kendi block.clearing animasyonuyla (zaten gösterişli) patlasın.
+    var maxBursts=18;
+    var burstStep = keys.length>maxBursts ? Math.ceil(keys.length/maxBursts) : 1;
+    keys.forEach(function(key,i){
+      var el=document.getElementById('blk-'+key);
+      if (!el) return;
+      var delay = keys.length>1 ? (i/(keys.length-1))*waveSpan : 0;
+      if (i%burstStep===0){
+        setTimeout(function(){
+          var er=el.getBoundingClientRect();
+          burstSpark(er.left+er.width/2, er.top+er.height/2, el.dataset.color||'#ffd166', intensity);
+        }, delay);
+      }
+    });
+    var bonus = totalLines*130 + Math.max(0,totalLines-1)*90; // skor hızlı yükselsin, tatmin edici olsun
+    score += bonus;
+    sfxClear(totalLines); vibrate(totalLines>1 ? [vibLevelMs(),40,vibLevelMs(),40,vibLevelMs()] : [vibLevelMs(),40,vibLevelMs()]);
+    var comboText = totalLines>1 ? ('COMBO x'+totalLines+'  +'+bonus) : ('+'+bonus);
+    setTimeout(function(){
+      floatCombo(rect.left+rect.width/2, rect.top+rect.height*0.35, comboText, totalLines>1?'#ffd166':'#4fe0a0', totalLines>1);
+    }, waveSpan*0.3);
+    setTimeout(function(){
+      cellsToClear.forEach(function(key){ var parts=key.split('-'); grid[+parts[0]][+parts[1]]=null; });
+      renderGrid(); updateScoreDisplay();
+      resolving=false; refreshBoosterUI();
+    }, waveSpan + 500);
+  } else { updateScoreDisplay(); }
+  if (trayPieces.every(function(p){return p.used;})) fillTray(); else checkNoMoves();
+}
+var pendingUnlockColors=null, pendingBombPiece=false;
+function updateScoreDisplay(){
+  scoreVal.textContent=score; hudScoreVal.textContent=score;
+  if (score>best){ best=score; recordBeaten=true; levelVal.textContent=best; saveBest(); }
+  var idx=unlockedStageIndex(score);
+  if (idx>seenStage){
+    seenStage=idx;
+    // sessizce, ödül/uyarı göstermeden: yeni renkleri bir sonraki gelecek parçalara garanti karıştır
+    pendingUnlockColors=GEM_STAGES[idx].colors;
+    var unusedIdx=[]; trayPieces.forEach(function(p,i){ if(!p.used) unusedIdx.push(i); });
+    if (unusedIdx.length){
+      var pickIdx=unusedIdx[Math.floor(Math.random()*unusedIdx.length)];
+      trayPieces[pickIdx].gem=pendingUnlockColors[Math.floor(Math.random()*pendingUnlockColors.length)];
+      renderTray();
+    }
+  }
+  var bIdx=unlockedBoardIndex(score);
+  if (bIdx>boardSeenStage){
+    boardSeenStage=bIdx;
+    applyBoardColor(score);
+  }
+}
+function attachPieceDrag(el, piece, idx, mini){
+  el.addEventListener('pointerdown', function(ev){
+    ev.preventDefault(); if (dragging) return; dragging=true;
+    if (typeof sfxPickup==='function') sfxPickup(); vibrate(vibLevelMs()*0.4);
+    var b=shapeBounds(piece.shape);
+    var scale = cellSize/mini;
+    var ghost=document.createElement('div'); ghost.className='ghost';
+    var gw=b.cols*cellSize, gh=b.rows*cellSize;
+    ghost.style.width=gw+'px'; ghost.style.height=gh+'px';
+    piece.shape.forEach(function(p){
+      var d=document.createElement('div'); d.className='block';
+      d.style.width=cellSize+'px'; d.style.height=cellSize+'px';
+      d.style.left=(p[1]*cellSize)+'px'; d.style.top=(p[0]*cellSize)+'px';
+      d.style.background='linear-gradient(160deg,'+piece.gem.c1+','+piece.gem.c2+')';
+      if (piece.isBomb){ d.classList.add('bomb-cell'); d.style.display='flex'; d.style.alignItems='center'; d.style.justifyContent='center'; d.style.fontSize=(cellSize*0.6)+'px'; d.textContent='💣'; }
+      ghost.appendChild(d);
+    });
+    document.body.appendChild(ghost);
+    var LIFT=90; // parmağın altında kalmasın diye bloğu parmaktan belirgin şekilde yukarıda göster
+    function place(x,y){ ghost.style.left=(x-gw/2)+'px'; ghost.style.top=(y-gh-LIFT)+'px'; }
+    place(ev.clientX, ev.clientY);
+    function computeOrigin(x,y){
+      var rect=boardEl.getBoundingClientRect();
+      var topLeftX = x - gw/2, topLeftY = y - gh - LIFT;
+      var c0 = Math.round((topLeftX-rect.left-PAD)/cellSize);
+      var r0 = Math.round((topLeftY-rect.top-PAD)/cellSize);
+      return {r0:r0,c0:c0};
+    }
+    var ghostCells=ghost.children;
+    function unmark(){
+      boardEl.querySelectorAll('.willclear').forEach(function(e){e.classList.remove('willclear');});
+      for (var i=0;i<ghostCells.length;i++) ghostCells[i].classList.remove('willclear');
+    }
+    function markClears(ok,o){
+      unmark(); if (!ok) return;
+      if (piece.isBomb){
+        for (var dr=-1;dr<=1;dr++) for (var dc=-1;dc<=1;dc++){ var e=document.getElementById('blk-'+(o.r0+dr)+'-'+(o.c0+dc)); if (e) e.classList.add('willclear'); }
+        return;
+      }
+      var mine={}; piece.shape.forEach(function(p){ mine[(o.r0+p[0])+'-'+(o.c0+p[1])]=1; });
+      function occ(r,c){ return !!grid[r][c] || !!mine[r+'-'+c]; }
+      var rows=[], cols=[];
+      for (var r=0;r<N;r++){ var f=true; for (var c=0;c<N;c++) if(!occ(r,c)){f=false;break;} if(f) rows.push(r); }
+      for (var c2=0;c2<N;c2++){ var f2=true; for (var r2=0;r2<N;r2++) if(!occ(r2,c2)){f2=false;break;} if(f2) cols.push(c2); }
+      if (!rows.length && !cols.length) return;
+      function inLine(r,c){ return rows.indexOf(r)>=0 || cols.indexOf(c)>=0; }
+      for (var rr=0;rr<N;rr++) for (var cc=0;cc<N;cc++){
+        if (!inLine(rr,cc)) continue;
+        var el=document.getElementById('blk-'+rr+'-'+cc); if (el) el.classList.add('willclear');
+      }
+      piece.shape.forEach(function(p,i){ if (inLine(o.r0+p[0], o.c0+p[1]) && ghostCells[i]) ghostCells[i].classList.add('willclear'); });
+    }
+    function clearHi(){ boardEl.querySelectorAll('.bgcell').forEach(function(e){e.classList.remove('hi','bad');}); }
+    function onMove(mv){
+      place(mv.clientX, mv.clientY);
+      var o=computeOrigin(mv.clientX, mv.clientY);
+      clearHi();
+      var ok=canPlace(piece.shape,o.r0,o.c0);
+      piece.shape.forEach(function(p){
+        var r=o.r0+p[0], c=o.c0+p[1];
+        var bg=document.getElementById('bg-'+r+'-'+c);
+        if (bg) bg.classList.add(ok?'hi':'bad');
+      });
+      markClears(ok,o);
+      onMove._last=o; onMove._ok=ok;
+    }
+    function onUp(up){
+      window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp);
+      clearHi(); unmark(); ghost.remove(); dragging=false;
+      if (onMove._ok && onMove._last){ placePiece(piece, onMove._last.r0, onMove._last.c0); }
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, {once:true});
+  });
+}
+mBtn.addEventListener('click', function(){ if (over && goStage===1){ goStage=2; applyGoStage(); } else newGame(); });
+mAdBtn.addEventListener('click', function(){
+  /* tek seferlik ücretsiz canlanma hakkı: bekleme/reklam ekranı yok, anında devam */
+  overlay.hidden=true;
+  continueAfterAd();
+});
+window.addEventListener('resize', function(){ measure(); layoutBg(); renderGrid(); renderTray(); });
+var SAVE_KEY='renklibloklar_save';
+function saveGame(){
+  try{
+    if (over){ localStorage.removeItem(SAVE_KEY); return; }
+    if (resolving || dragging || !grid || !(score>0)) return;
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ v:1, grid:grid, score:score, tray:trayPieces, cont:continuedThisGame, rb:recordBeaten, ss:seenStage, bs:boardSeenStage, pb:pendingBombPiece, pu:pendingUnlockColors, lf:(typeof lastFlushedScore==='number'?lastFlushedScore:0) }));
+  }catch(e){}
+}
+function restoreGame(){
+  try{
+    var raw=localStorage.getItem(SAVE_KEY); if (!raw) return false;
+    var s=JSON.parse(raw);
+    if (!s || s.v!==1 || !Array.isArray(s.grid) || s.grid.length!==N || !Array.isArray(s.tray) || s.tray.length!==3 || !(s.score>0)) return false;
+    for (var i=0;i<N;i++){ if (!Array.isArray(s.grid[i]) || s.grid[i].length!==N) return false; }
+    grid=s.grid; score=s.score; over=false; recordBeaten=!!s.rb; seenStage=s.ss||0; boardSeenStage=s.bs||0; continuedThisGame=!!s.cont;
+    pendingBombPiece=!!s.pb; pendingUnlockColors=s.pu||null;
+    undoSnapshot=null; resolving=false;
+    applyBoardColor(score);
+    best=loadBest();
+    levelVal.textContent=best; scoreVal.textContent=score; hudScoreVal.textContent=score;
+    overlay.hidden=true;
+    measure(); layoutBg(); renderGrid();
+    trayPieces=s.tray;
+    if (trayPieces.every(function(p){return p.used;})) fillTray(); else { renderTray(); checkNoMoves(); }
+    if (typeof daily!=='undefined' && typeof refreshBoosterUI==='function') refreshBoosterUI();
+    window.__restFlushed=s.lf||0;
+    return true;
+  }catch(e){ return false; }
+}
+if (!restoreGame()) newGame();
+setInterval(saveGame, 1000);
+document.addEventListener('visibilitychange', function(){ if (document.hidden) saveGame(); });
+window.addEventListener('pagehide', saveGame);
+
+/* ---- Ligler (Firebase / Firestore — ücretsiz Spark planı) ----
+   30 basamak, her ligde en fazla 30 kişi, haftalık: ilk 5 yükselir, son 5 düşer.
+   Haftalık yükselme/düşme sunucu gerektirmeden, her oyuncunun kendi cihazında "tembel" hesaplanır. */
+// Firebase konsolundan aldığın değerleri buraya yapıştır (rehbere bak). projectId boşsa ligler kapalı kalır.
+var FIREBASE_CONFIG={ apiKey:'AIzaSyCukTIrNSVzj4dfjveZLS0DZGofu3Q4fFc', authDomain:'renkli-bloklar.firebaseapp.com', projectId:'renkli-bloklar', appId:'1:897470213666:web:f6c6f188ef76391911e47b' };
+var LEAGUE_SIZE=30, TIER_COUNT=30, MOVE_MAX=5;
+var TIER_FAMILIES=[['🥉',tx('t_bronze')],['🥈',tx('t_silver')],['🥇',tx('t_gold')],['💎',tx('t_diamond')],['🔥',tx('t_legend')],['👑',tx('t_champ')]];
+var ROMAN=['I','II','III','IV','V'];
+function tierName(t){ t=Math.max(0,Math.min(TIER_COUNT-1,t||0)); var f=TIER_FAMILIES[Math.floor(t/5)]; return f[0]+' '+f[1]+' '+ROMAN[t%5]; }
+var COUNTRIES=[
+  ['TR','🇹🇷 Türkiye'],['US','🇺🇸 ABD'],['DE','🇩🇪 Almanya'],['GB','🇬🇧 İngiltere'],['FR','🇫🇷 Fransa'],
+  ['ES','🇪🇸 İspanya'],['IT','🇮🇹 İtalya'],['NL','🇳🇱 Hollanda'],['BE','🇧🇪 Belçika'],['CH','🇨🇭 İsviçre'],
+  ['AT','🇦🇹 Avusturya'],['PT','🇵🇹 Portekiz'],['RU','🇷🇺 Rusya'],['UA','🇺🇦 Ukrayna'],['PL','🇵🇱 Polonya'],
+  ['SE','🇸🇪 İsveç'],['NO','🇳🇴 Norveç'],['DK','🇩🇰 Danimarka'],['FI','🇫🇮 Finlandiya'],['IE','🇮🇪 İrlanda'],
+  ['CZ','🇨🇿 Çekya'],['HU','🇭🇺 Macaristan'],['GR','🇬🇷 Yunanistan'],['BG','🇧🇬 Bulgaristan'],['RO','🇷🇴 Romanya'],
+  ['RS','🇷🇸 Sırbistan'],['HR','🇭🇷 Hırvatistan'],['SK','🇸🇰 Slovakya'],['SI','🇸🇮 Slovenya'],['AL','🇦🇱 Arnavutluk'],
+  ['BA','🇧🇦 Bosna Hersek'],['MK','🇲🇰 K.Makedonya'],['LT','🇱🇹 Litvanya'],['LV','🇱🇻 Letonya'],['EE','🇪🇪 Estonya'],
+  ['BY','🇧🇾 Belarus'],['MD','🇲🇩 Moldova'],['GE','🇬🇪 Gürcistan'],['AM','🇦🇲 Ermenistan'],['AZ','🇦🇿 Azerbaycan'],
+  ['KZ','🇰🇿 Kazakistan'],['UZ','🇺🇿 Özbekistan'],['TM','🇹🇲 Türkmenistan'],['KG','🇰🇬 Kırgızistan'],
+  ['BR','🇧🇷 Brezilya'],['MX','🇲🇽 Meksika'],['AR','🇦🇷 Arjantin'],['CO','🇨🇴 Kolombiya'],['CL','🇨🇱 Şili'],
+  ['PE','🇵🇪 Peru'],['VE','🇻🇪 Venezuela'],['CA','🇨🇦 Kanada'],['AU','🇦🇺 Avustralya'],['NZ','🇳🇿 Y.Zelanda'],
+  ['IN','🇮🇳 Hindistan'],['PK','🇵🇰 Pakistan'],['BD','🇧🇩 Bangladeş'],['LK','🇱🇰 Sri Lanka'],['NP','🇳🇵 Nepal'],
+  ['ID','🇮🇩 Endonezya'],['MY','🇲🇾 Malezya'],['SG','🇸🇬 Singapur'],['PH','🇵🇭 Filipinler'],['VN','🇻🇳 Vietnam'],
+  ['TH','🇹🇭 Tayland'],['CN','🇨🇳 Çin'],['JP','🇯🇵 Japonya'],['KR','🇰🇷 G.Kore'],['SA','🇸🇦 S.Arabistan'],
+  ['AE','🇦🇪 BAE'],['QA','🇶🇦 Katar'],['KW','🇰🇼 Kuveyt'],['OM','🇴🇲 Umman'],['JO','🇯🇴 Ürdün'],
+  ['LB','🇱🇧 Lübnan'],['IQ','🇮🇶 Irak'],['IR','🇮🇷 İran'],['EG','🇪🇬 Mısır'],['MA','🇲🇦 Fas'],
+  ['DZ','🇩🇿 Cezayir'],['TN','🇹🇳 Tunus'],['NG','🇳🇬 Nijerya'],['KE','🇰🇪 Kenya'],['GH','🇬🇭 Gana'],
+  ['ET','🇪🇹 Etiyopya'],['ZA','🇿🇦 G.Afrika'],['OTHER','🌐 Diğer']
+];
+var regionNames=null; try{ if (LANG!=='tr') regionNames=new Intl.DisplayNames([LANG],{type:'region'}); }catch(e){}
+function flagOf(code){ if (!/^[A-Z]{2}$/.test(code||'')) return '🌐'; return String.fromCodePoint(127397+code.charCodeAt(0), 127397+code.charCodeAt(1)); }
+function countryLabel(code){
+  var f=COUNTRIES.find(function(c){return c[0]===code;});
+  if (LANG==='tr') return f?f[1]:tx('other');
+  if (!code || code==='OTHER') return tx('other');
+  var nm=null; try{ nm=regionNames && regionNames.of(code); }catch(e){}
+  return nm ? flagOf(code)+' '+nm : (f?f[1]:tx('other'));
+}
+var WEEK_MS=7*86400000, WEEK_EPOCH=Date.UTC(2024,0,1); // 1 Ocak 2024 = Pazartesi
+function currentWeekId(){ return Math.floor((Date.now()-WEEK_EPOCH)/WEEK_MS); }
+function weekEndsInMs(){ return WEEK_EPOCH+(currentWeekId()+1)*WEEK_MS-Date.now(); }
+function moveCount(n){ return Math.min(MOVE_MAX, Math.floor(n/6)); } // küçük liglerde daha az yükselen/düşen
+function nextTier(tier, rank, n){
+  var k=moveCount(n);
+  if (rank<=k) return Math.min(TIER_COUNT-1, tier+1);
+  if (rank>n-k) return Math.max(0, tier-1);
+  return tier;
+}
+function fmtLeft(ms){ var d=Math.floor(ms/86400000), h=Math.floor(ms%86400000/3600000); return d>0 ? d+' '+tx('d')+' '+h+' '+tx('h') : h+' '+tx('h'); }
+
+var rankOpenBtn=document.getElementById('rankOpenBtn'), rankOverlay=document.getElementById('rankOverlay'), rankCloseBtn=document.getElementById('rankCloseBtn');
+var leagueHead=document.getElementById('leagueHead'), rankList=document.getElementById('rankList');
+var nameRow=document.getElementById('nameRow'), nameInput=document.getElementById('nameInput'), nameSaveBtn=document.getElementById('nameSaveBtn'), countrySelect=document.getElementById('countrySelect');
+var tabLeague=document.getElementById('tabLeague'), tabGlobal=document.getElementById('tabGlobal'), rankTab='LEAGUE';
+COUNTRIES.forEach(function(c){ var o=document.createElement('option'); o.value=c[0]; o.textContent=countryLabel(c[0]); countrySelect.appendChild(o); });
+function updateTRLabel(){}
+var fdb=null, myUid=null, me=null, leagueOn=false, leagueErr=false, lastFlushedScore=0, pendingPoints=0, leagueQueue=Promise.resolve(), lastResult=null;
+
+function loadScript(src){ return new Promise(function(res,rej){ var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+function queue(fn){ leagueQueue=leagueQueue.then(fn).catch(function(){ leagueErr=true; }); return leagueQueue; }
+
+function initRank(){
+  if (!FIREBASE_CONFIG.projectId) return;
+  var base='https://www.gstatic.com/firebasejs/10.12.2/';
+  loadScript(base+'firebase-app-compat.js')
+    .then(function(){ return loadScript(base+'firebase-auth-compat.js'); })
+    .then(function(){ return loadScript(base+'firebase-firestore-compat.js'); })
+    .then(function(){
+      firebase.initializeApp(FIREBASE_CONFIG);
+      fdb=firebase.firestore();
+      return firebase.auth().signInAnonymously();
+    })
+    .then(function(cred){
+      myUid=cred.user.uid;
+      return fdb.collection('players').doc(myUid).get();
+    })
+    .then(function(snap){
+      me = snap.exists ? snap.data() : null;
+      leagueOn=true; updateTRLabel();
+      drainPending();
+    })
+    .catch(function(){ leagueErr=true; });
+}
+
+/* Geçen haftanın ligine bakıp bu haftaki basamağı hesapla (sadece bir kez, kendi kaydı için) */
+/* Uygulamayı silen/bırakan oyuncular (seen = son puan zamanı) listelerde yer işgal etmesin */
+function isActive(v, maxDays, ref){ return !v || !v.seen || ((ref||Date.now()) - v.seen) <= maxDays*86400000; }
+function resolveWeek(){
+  var wk=currentWeekId();
+  if (!me || !me.leagueId || me.weekId>=wk) return Promise.resolve(null);
+  return fdb.collection('leagues').doc(me.leagueId).collection('members').orderBy('points','desc').get().then(function(snap){
+    var wkEnd=WEEK_EPOCH+(me.weekId+1)*WEEK_MS;
+    var docs=snap.docs.filter(function(d){ return d.id===myUid || isActive(d.data(), 15, wkEnd); });
+    var n=docs.length, rank=n+1;
+    docs.forEach(function(d,i){ if (d.id===myUid) rank=i+1; });
+    var from=me.tier||0, to=nextTier(from, rank, n);
+    var res={ from:from, to:to, rank:rank, n:n };
+    me.tier=to; me.weekId=wk; me.leagueId=null; me.lastResult=res;
+    lastResult=res;
+    return fdb.collection('players').doc(myUid).set({ name:me.name, tier:to, weekId:wk, leagueId:null, lastResult:res }, { merge:true }).then(function(){ return res; });
+  });
+}
+
+/* Bu haftanın ligine katıl (ilk puan yazılırken). Sayaç dokümanı ile 30'ar kişilik gruplar oluşur. */
+function joinLeague(){
+  var wk=currentWeekId(), tier=me.tier||0;
+  var cc=me.country||'OTHER';
+  var cref=fdb.collection('counters').doc(wk+'_'+tier+'_'+cc);
+  return fdb.runTransaction(function(tx){
+    return tx.get(cref).then(function(cs){
+      var cnt=cs.exists ? (cs.data().n||0) : 0;
+      var lid=wk+'_'+tier+'_'+cc+'_'+Math.floor(cnt/LEAGUE_SIZE);
+      var lref=fdb.collection('leagues').doc(lid);
+      tx.set(cref,{ n:cnt+1 });
+      tx.set(lref,{ tier:tier, weekId:wk, country:cc },{ merge:true });
+      tx.set(lref.collection('members').doc(myUid),{ name:me.name, points:0 });
+      tx.set(fdb.collection('players').doc(myUid),{ name:me.name, tier:tier, weekId:wk, leagueId:lid },{ merge:true });
+      return lid;
+    });
+  }).then(function(lid){ me.weekId=wk; me.leagueId=lid; });
+}
+
+function addPoints(d){
+  var wk=currentWeekId();
+  return resolveWeek().then(function(){
+    if (me.weekId!==wk || !me.leagueId) return joinLeague();
+  }).then(function(){
+    ptsSinceCache+=d;
+    var inc=firebase.firestore.FieldValue.increment(d), cc=me.country||'OTHER';
+    var rec={ name:me.name, country:cc, total:inc, seen:Date.now() };
+    return Promise.all([
+      fdb.collection('leagues').doc(me.leagueId).collection('members').doc(myUid).update({ points: inc, seen:Date.now() }),
+      fdb.collection('boards').doc('ALL').collection('members').doc(myUid).set(rec,{ merge:true })
+    ]);
+  }).then(function(){ if (!rankOverlay.hidden) renderRank(); });
+}
+
+function drainPending(){
+  if (!leagueOn || !me || !me.name || !me.country || pendingPoints<=0) return;
+  var d=pendingPoints; pendingPoints=0;
+  queue(function(){ return addPoints(d); });
+}
+/* Oyun bitince / yeni oyuna geçerken / uygulama arka plana gidince: o ana kadar kazanılan puanı lige ekle */
+function flushScore(){
+  var s=(typeof score==='number') ? score : 0;
+  var d=s-(lastFlushedScore||0);
+  if (!(d>0)) return;
+  lastFlushedScore=s;
+  pendingPoints+=d;
+  drainPending();
+}
+document.addEventListener('visibilitychange', function(){ if (document.hidden) flushScore(); });
+if (window.__restFlushed) lastFlushedScore=window.__restFlushed;
+
+function openRank(){
+  rankOverlay.hidden=false;
+  nameRow.hidden=true;
+  if (!FIREBASE_CONFIG.projectId){ leagueHead.innerHTML=''; rankList.innerHTML='<div class="rank-empty">'+tx('lg_soon')+'</div>'; return; }
+  if (leagueErr && !leagueOn){ leagueHead.innerHTML=''; rankList.innerHTML='<div class="rank-empty">'+tx('lg_noconn')+'</div>'; return; }
+  if (!leagueOn){ leagueHead.innerHTML=''; rankList.innerHTML='<div class="rank-empty">'+tx('connecting')+'</div>'; setTimeout(function(){ if (!rankOverlay.hidden) openRank(); }, 1200); return; }
+  if (!me || !me.name || !me.country){
+    if (me && me.name) nameInput.value=me.name;
+    leagueHead.innerHTML='<div class="lg-name">'+tx('lg_head')+'</div><div class="lg-sub">'+tx('lg_sub_join')+'</div>';
+    rankList.innerHTML='<div class="rank-empty">'+tx('lg_info')+'</div>';
+    nameRow.hidden=false;
+    return;
+  }
+  updateTRLabel();
+  renderRank();
+}
+function closeRank(){ rankOverlay.hidden=true; if (over && !overlay.hidden && goStage===2 && typeof startGoRank==='function'){ renderGoResult(); startGoRank(); } }
+
+function renderLeague(){
+  queue(function(){
+    return resolveWeek().then(function(){
+      var wk=currentWeekId();
+      var left=tx('week_left',fmtLeft(weekEndsInMs()));
+      var banner='';
+      if (lastResult){
+        var r=lastResult, t;
+        if (r.to>r.from) t=tx('res_up',r.rank,tierName(r.to));
+        else if (r.to<r.from) t=tx('res_down',r.rank,tierName(r.to));
+        else t=tx('res_same',r.rank);
+        banner='<div class="rank-banner">'+t+'</div>';
+      }
+      if (!me.leagueId || me.weekId!==wk){
+        leagueHead.innerHTML='<div class="lg-name">'+tierName(me.tier||0)+'</div><div class="lg-sub">'+left+'</div>';
+        rankList.innerHTML=banner+'<div class="rank-empty">'+tx('not_played')+'</div>';
+        return;
+      }
+      return fdb.collection('leagues').doc(me.leagueId).collection('members').orderBy('points','desc').limit(LEAGUE_SIZE).get().then(function(snap){
+        var docs=snap.docs.filter(function(d){ return d.id===myUid || isActive(d.data(), 15); });
+        var n=docs.length, k=moveCount(n), html=banner;
+        docs.forEach(function(d,i){
+          var v=d.data(), rank=i+1, mine=(d.id===myUid);
+          var zone = rank<=k ? ' up' : (rank>n-k ? ' down' : '');
+          var mark = zone===' up' ? '▲' : (zone===' down' ? '▼' : '');
+          html += '<div class="rank-row'+(mine?' me':'')+zone+'"><div class="num">'+rank+'</div><div class="nm">'+escapeHtml(v.name||'?')+'</div><div class="mk">'+mark+'</div><div class="sc">'+(v.points||0)+'</div></div>';
+        });
+        leagueHead.innerHTML='<div class="lg-name">'+tierName(me.tier||0)+'</div><div class="lg-sub">'+countryLabel(me.country)+' · '+left+(k>0?tx('move_info',k):'')+'</div>';
+        rankList.innerHTML=html;
+      });
+    });
+  });
+}
+function renderRank(){
+  if (rankTab==='LEAGUE') renderLeague(); else renderBoard('ALL');
+}
+function renderBoard(cc){
+  leagueHead.innerHTML='<div class="lg-name">'+(cc==='ALL'?tx('world'):countryLabel(cc))+'</div><div class="lg-sub">'+tx('alltime')+'</div>';
+  rankList.innerHTML='<div class="rank-empty">'+tx('loading')+'</div>';
+  queue(function(){
+    return fdb.collection('boards').doc(cc).collection('members').orderBy('total','desc').limit(50).get().then(function(snap){
+      var docs=snap.docs.filter(function(d){ return d.id===myUid || isActive(d.data(), 30); });
+      if (!docs.length){ rankList.innerHTML='<div class="rank-empty">'+tx('nobody')+'</div>'; return; }
+      var html='';
+      docs.forEach(function(d,i){
+        var v=d.data(), mine=(d.id===myUid);
+        var flag = cc==='ALL' ? ' <span class="mk">'+countryLabel(v.country).split(' ')[0]+'</span>' : '';
+        html += '<div class="rank-row'+(mine?' me':'')+'"><div class="num">'+(i+1)+'</div><div class="nm">'+escapeHtml(v.name||'?')+flag+'</div><div class="sc">'+(v.total||0)+'</div></div>';
+      });
+      rankList.innerHTML=html;
+    });
+  });
+}
+function setTab(t){
+  rankTab=t;
+  tabLeague.classList.toggle('active', t==='LEAGUE'); tabGlobal.classList.toggle('active', t==='GLOBAL');
+  if (me && me.name && me.country) renderRank();
+}
+tabLeague.addEventListener('click', function(){ setTab('LEAGUE'); });
+tabGlobal.addEventListener('click', function(){ setTab('GLOBAL'); });
+function escapeHtml(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+rankOpenBtn.addEventListener('click', openRank);
+rankCloseBtn.addEventListener('click', closeRank);
+nameSaveBtn.addEventListener('click', function(){
+  var nm=(nameInput.value||'').trim().slice(0,16), cc=countrySelect.value||'OTHER';
+  if (!nm || !leagueOn) return;
+  var prev=me||{};
+  me={ name:nm, country:cc, tier:prev.tier||0, weekId:prev.weekId!=null?prev.weekId:currentWeekId(), leagueId:prev.leagueId||null };
+  nameRow.hidden=true; updateTRLabel();
+  queue(function(){ return fdb.collection('players').doc(myUid).set({ name:nm, country:cc, tier:me.tier, weekId:me.weekId, leagueId:me.leagueId }, { merge:true }); })
+    .then(function(){ drainPending(); renderRank(); });
+});
+
+/* ---- Oyun sonu: lig sıralaması + değişim + katıl penceresi ---- */
+var lgCache=null, ptsSinceCache=0, JOINX_KEY='renklibloklar_joinx', LASTRANK_KEY='renklibloklar_lastrank';
+function isJoined(){ return !!(me && me.name && me.country); }
+function joinDismissed(){ try{ var t=parseInt(localStorage.getItem(JOINX_KEY)||'0',10); return t && (Date.now()-t) < 86400000; }catch(e){ return false; } }
+function fetchGoRank(){
+  return queue(function(){
+    if (!leagueOn || !isJoined()) return null;
+    return resolveWeek().then(function(){
+      if (!me.leagueId || me.weekId!==currentWeekId()) return null;
+      var lid=me.leagueId;
+      var fresh = lgCache && lgCache.lid===lid && (Date.now()-lgCache.t)<60000;
+      var rowsP;
+      if (fresh){
+        rowsP = Promise.resolve(lgCache.rows.map(function(r){ return { id:r.id, points: r.points + (r.id===myUid ? ptsSinceCache : 0), name:r.name, seen:r.seen }; }));
+      } else {
+        rowsP = fdb.collection('leagues').doc(lid).collection('members').orderBy('points','desc').limit(LEAGUE_SIZE).get().then(function(snap){
+          var rows=snap.docs.map(function(d){ var v=d.data(); return { id:d.id, points:v.points||0, name:v.name, seen:v.seen }; });
+          lgCache={ lid:lid, t:Date.now(), rows:rows }; ptsSinceCache=0; return rows;
+        });
+      }
+      return rowsP.then(function(rows){
+        rows=rows.filter(function(r){ return r.id===myUid || isActive(r, 15); }).sort(function(a,b){ return b.points-a.points; });
+        var n=rows.length, rank=0;
+        rows.forEach(function(r,i){ if (r.id===myUid) rank=i+1; });
+        if (!rank) return null;
+        var prev=null;
+        try{ var o=JSON.parse(localStorage.getItem(LASTRANK_KEY)||'null'); if (o && o.lid===lid) prev=o.rank; }catch(e){}
+        try{ localStorage.setItem(LASTRANK_KEY, JSON.stringify({ lid:lid, rank:rank })); }catch(e){}
+        return { rank:rank, n:n, tier:me.tier||0, change: (prev==null ? null : prev-rank) };
+      });
+    });
+  }).catch(function(){ return null; });
+}
+function startGoRank(){
+  goRankLoading=true; goRankInfo=null;
+  var tries=0;
+  (function wait(){
+    if (!leagueOn && !leagueErr && tries++<12) return setTimeout(wait, 400);
+    fetchGoRank().then(function(info){
+      goRankInfo=info; goRankLoading=false;
+      if (over && !overlay.hidden && goStage===2) renderGoResult();
+    });
+  })();
+}
+function renderGoResult(){
+  /* sıralama kutusu */
+  if (goRankInfo){
+    var r=goRankInfo, ch='';
+    if (r.change>0) ch='<div class="gl-ch up">'+tx('go_up',r.change)+'</div>';
+    else if (r.change<0) ch='<div class="gl-ch down">'+tx('go_down',-r.change)+'</div>';
+    else if (r.change===0) ch='<div class="gl-ch same">'+tx('go_same')+'</div>';
+    goLeagueEl.innerHTML=tx('go_rank',tierName(r.tier),r.rank,r.n)+ch;
+    goLeagueEl.hidden=false;
+  } else {
+    goLeagueEl.hidden=true;
+  }
+  /* katıl penceresi: ligde değilse, bağlantı varsa, X ile kapatılmadıysa */
+  goJoinEl.hidden = !(leagueOn && !isJoined());   /* ligde olmayanlara her oyun sonunda çıkar, ligdekilere çıkmaz */
+}
+document.getElementById('goJoinX').addEventListener('click', function(){
+  goJoinEl.hidden=true;   /* sadece bu ekran için kapanır; sonraki oyunda yine çıkar */
+});
+document.getElementById('goJoinBtn').addEventListener('click', function(){ openRank(); });
+initRank();
+
+/* ---- Ayarlar: Ses / Müzik / Titreşim ---- */
+var settingsOpenBtn=document.getElementById('settingsOpenBtn'), settingsOverlay=document.getElementById('settingsOverlay'), settingsCloseBtn=document.getElementById('settingsCloseBtn');
+var toggleSound=document.getElementById('toggleSound'), toggleBgm=document.getElementById('toggleBgm'), toggleVib=document.getElementById('toggleVib');
+var vibRange=document.getElementById('vibRange'), vibMinus=document.getElementById('vibMinus'), vibPlus=document.getElementById('vibPlus');
+var settings={ sound:true, bgm:false, vib:true, vibLevel:3 };
+(function loadSettings(){
+  try{ var raw=localStorage.getItem('renklibloklar_settings'); if (raw) settings=Object.assign(settings, JSON.parse(raw)); }catch(e){}
+})();
+function saveSettings(){ try{ localStorage.setItem('renklibloklar_settings', JSON.stringify(settings)); }catch(e){} }
+function refreshSettingsUI(){
+  toggleSound.classList.toggle('off', !settings.sound);
+  toggleBgm.classList.toggle('off', !settings.bgm);
+  toggleVib.classList.toggle('off', !settings.vib);
+  vibRange.value=settings.vibLevel;
+}
+refreshSettingsUI();
+
+var audioCtx=null;
+function ac(){ if (!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return audioCtx; }
+function beep(freq,dur,type,vol){
+  if (!settings.sound) return;
+  var c=ac(); if (!c) return;
+  var o=c.createOscillator(), g=c.createGain();
+  o.type=type||'sine'; o.frequency.value=freq;
+  g.gain.value=0;
+  o.connect(g); g.connect(c.destination);
+  var t=c.currentTime;
+  g.gain.linearRampToValueAtTime(vol||0.14, t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.start(t); o.stop(t+dur+0.02);
+}
+function sfxPlace(){ beep(320,0.09,'triangle',0.12); }
+function sfxPickup(){ beep(700,0.045,'sine',0.05); }
+function noiseBurst(dur, vol, freq){
+  if (!settings.sound) return;
+  var c=ac(); if (!c) return;
+  var bufSize=Math.floor(c.sampleRate*dur);
+  var buf=c.createBuffer(1, bufSize, c.sampleRate);
+  var data=buf.getChannelData(0);
+  for (var i=0;i<bufSize;i++){ data[i]=(Math.random()*2-1)*(1-i/bufSize); }
+  var src=c.createBufferSource(); src.buffer=buf;
+  var filt=c.createBiquadFilter(); filt.type='bandpass'; filt.frequency.value=freq||1800; filt.Q.value=0.8;
+  var g=c.createGain(); g.gain.value=vol||0.12;
+  src.connect(filt); filt.connect(g); g.connect(c.destination);
+  src.start(); src.stop(c.currentTime+dur+0.02);
+}
+function sfxClear(lines){
+  var base=520;
+  for (var i=0;i<Math.min(lines,4);i++){ (function(i){ setTimeout(function(){ beep(base+i*130,0.16,'square',0.13); }, i*70); })(i); }
+  // normal tek çizgi patlaması hafif bir "pat" sesiyle taçlansın
+  noiseBurst(0.12, 0.10, 2400);
+  if (lines>1){
+    // büyük kombo: ekstra derin "boom" + daha sert kırılma sesi
+    beep(95,0.34,'sine',0.24);
+    setTimeout(function(){ beep(65,0.28,'triangle',0.16); }, 60);
+    setTimeout(function(){ noiseBurst(0.22, 0.16, 1200); }, 40);
+  }
+  voiceCallout(lines);
+}
+var lastCalloutAt=0;
+// konuşma/sesli kelime yerine kısa, eğlenceli bir "jingle" (küçük nota dizisi) — insan sesi yok, sadece müzikal bir "ta-da"
+function playJingle(notes, noteDur, type, vol){
+  if (!settings.sound) return;
+  notes.forEach(function(freq,i){ setTimeout(function(){ beep(freq, noteDur, type||'square', vol||0.12); }, i*noteDur*620); });
+}
+function voiceCallout(lines){
+  // oyun "kalas gibi/cansız" hissettiriyordu — artık tek satır temizlemede de (düşük ihtimalle)
+  // kısa eğlenceli bir jingle çalıyor, böylece en sık olan an da hayat buluyor (konuşma YOK, sadece müzik)
+  if (!settings.sound) return;
+  var now=Date.now();
+  if (now-lastCalloutAt<1200) return; // art arda üst üste binmesin diye çok kısa bir bekleme
+  var chance = lines>=4 ? 1 : (lines>=2 ? 0.8 : 0.22);
+  if (Math.random()>chance) return;
+  lastCalloutAt=now;
+  if (lines>=4) playJingle([523,659,784,1047], 0.09, 'square', 0.14);       // büyük kombo: neşeli 4 nota
+  else if (lines>=2) playJingle([587,784,988], 0.1, 'square', 0.13);        // kombo: kısa 3 nota
+  else playJingle([659,880], 0.08, 'triangle', 0.1);                        // tekli: ufak 2 nota "ting"
+}
+var bgmState=null;
+var BGM_CHORDS=[
+  [261.63,329.63,392.00,493.88], // Cmaj7
+  [220.00,261.63,329.63,392.00], // Am7
+  [174.61,220.00,261.63,349.23], // Fmaj7
+  [196.00,246.94,293.66,392.00]  // G
+];
+function startBgm(){
+  if (!settings.bgm) return;
+  var c=ac(); if (!c) return;
+  if (bgmState) return;
+  var master=c.createGain(); master.gain.value=0; master.connect(c.destination);
+  master.gain.linearRampToValueAtTime(0.075, c.currentTime+1.4);
+  var filter=c.createBiquadFilter(); filter.type='lowpass'; filter.frequency.value=1100; filter.Q.value=0.6;
+  filter.connect(master);
+  var st={master:master, filter:filter, timer:null, idx:0, stopped:false};
+  bgmState=st;
+  var chordDur=4.6;
+  function playChord(freqs,startTime){
+    freqs.forEach(function(f){
+      var o=c.createOscillator(); o.type='sine'; o.frequency.value=f;
+      var g=c.createGain(); g.gain.value=0;
+      o.connect(g); g.connect(st.filter);
+      g.gain.linearRampToValueAtTime(0.15/freqs.length, startTime+1.5);
+      g.gain.linearRampToValueAtTime(0.0, startTime+chordDur-0.4);
+      o.start(startTime); o.stop(startTime+chordDur+0.05);
+      var lfo=c.createOscillator(); lfo.frequency.value=0.12+Math.random()*0.1;
+      var lg=c.createGain(); lg.gain.value=2.2;
+      lfo.connect(lg); lg.connect(o.detune);
+      lfo.start(startTime); lfo.stop(startTime+chordDur+0.05);
+    });
+  }
+  function scheduleNext(){
+    if (st.stopped) return;
+    var t=c.currentTime+0.05;
+    playChord(BGM_CHORDS[st.idx%BGM_CHORDS.length], t);
+    st.idx++;
+    st.timer=setTimeout(scheduleNext, chordDur*1000*0.9);
+  }
+  scheduleNext();
+}
+function stopBgm(){
+  if (bgmState){
+    var st=bgmState; st.stopped=true;
+    if (st.timer) clearTimeout(st.timer);
+    try{ var c=ac(); st.master.gain.linearRampToValueAtTime(0, c.currentTime+0.5); }catch(e){}
+    setTimeout(function(){ try{ st.master.disconnect(); }catch(e){} }, 600);
+    bgmState=null;
+  }
+}
+function vibrate(pattern){
+  if (!settings.vib) return;
+  if (navigator.vibrate){ try{ navigator.vibrate(pattern); }catch(e){} }
+}
+function vibLevelMs(){ return 8 + settings.vibLevel*8; }
+
+settingsOpenBtn.addEventListener('click', function(){ settingsOverlay.hidden=false; ac(); });
+settingsCloseBtn.addEventListener('click', function(){ settingsOverlay.hidden=true; });
+document.getElementById('langBtn').addEventListener('click', function(){
+  try{ saveGame(); localStorage.setItem('renklibloklar_lang', LANG==='tr'?'en':'tr'); }catch(e){}
+  location.reload();
+});
+document.getElementById('restartBtn').addEventListener('click', function(){
+  settingsOverlay.hidden=true;
+  newGame();
+});
+toggleSound.addEventListener('click', function(){ settings.sound=!settings.sound; refreshSettingsUI(); saveSettings(); if(settings.sound) beep(440,0.1,'triangle',0.12); });
+toggleBgm.addEventListener('click', function(){ settings.bgm=!settings.bgm; refreshSettingsUI(); saveSettings(); ac(); if (settings.bgm) startBgm(); else stopBgm(); });
+toggleVib.addEventListener('click', function(){ settings.vib=!settings.vib; refreshSettingsUI(); saveSettings(); if (settings.vib) vibrate(vibLevelMs()); });
+vibRange.addEventListener('input', function(){ settings.vibLevel=parseInt(vibRange.value,10); saveSettings(); vibrate(vibLevelMs()); });
+vibMinus.addEventListener('click', function(){ vibRange.value=Math.max(1, parseInt(vibRange.value,10)-1); vibRange.dispatchEvent(new Event('input')); });
+vibPlus.addEventListener('click', function(){ vibRange.value=Math.min(5, parseInt(vibRange.value,10)+1); vibRange.dispatchEvent(new Event('input')); });
+
+/* ---- Boosterlar (Geri Al / Karıştır / İpucu) + günlük ödül ---- */
+var boostUndo=document.getElementById('boostUndo'), boostShuffle=document.getElementById('boostShuffle'), boostHint=document.getElementById('boostHint');
+var cntUndo=document.getElementById('cntUndo'), cntShuffle=document.getElementById('cntShuffle'), cntHint=document.getElementById('cntHint');
+var dailyOverlay=document.getElementById('dailyOverlay'), dailyStreakText=document.getElementById('dailyStreakText'), dailyRewardText=document.getElementById('dailyRewardText'), dailyBtn=document.getElementById('dailyBtn');
+var adOverlay=document.getElementById('adOverlay'), adTitle=document.getElementById('adTitle'), adText=document.getElementById('adText');
+var daily={ lastDate:null, streak:0, charges:{undo:0, shuffle:0, hint:0} };
+function todayKey(){ var d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function loadDaily(){
+  try{
+    var raw=localStorage.getItem('renklibloklar_daily');
+    if (raw) daily=Object.assign(daily, JSON.parse(raw));
+  }catch(e){}
+}
+function saveDaily(){ try{ localStorage.setItem('renklibloklar_daily', JSON.stringify(daily)); }catch(e){} }
+function checkDailyReward(){
+  var tk=todayKey();
+  if (daily.lastDate===tk) return; // bugün zaten alındı
+  var isFirstEver = !daily.lastDate;
+  var yest=new Date(); yest.setDate(yest.getDate()-1);
+  var yk=yest.getFullYear()+'-'+(yest.getMonth()+1)+'-'+yest.getDate();
+  daily.streak = (daily.lastDate===yk) ? (daily.streak+1) : 1;
+  daily.lastDate=tk;
+  var reward={undo:1, shuffle:1, hint:1};
+  if (daily.streak%3===0){ reward.undo++; reward.shuffle++; reward.hint++; }
+  daily.charges.undo=(daily.charges.undo||0)+reward.undo;
+  daily.charges.shuffle=(daily.charges.shuffle||0)+reward.shuffle;
+  daily.charges.hint=(daily.charges.hint||0)+reward.hint;
+  saveDaily();
+  refreshBoosterUI();
+  if (isFirstEver) return; // ilk açılışta popup gösterme, sessizce yükle
+  dailyStreakText.textContent=tx('streak',daily.streak);
+  dailyRewardText.textContent='+'+reward.undo+' 🔙 '+tx('undo')+'   +'+reward.shuffle+' 🔀 '+tx('shuffle')+'   +'+reward.hint+' 💡 '+tx('hint');
+  dailyOverlay.hidden=false;
+}
+function refreshBoosterUI(){
+  cntUndo.textContent=daily.charges.undo||0;
+  cntShuffle.textContent=daily.charges.shuffle||0;
+  cntHint.textContent=daily.charges.hint||0;
+  boostUndo.classList.toggle('empty', !(daily.charges.undo>0) || !undoSnapshot || resolving);
+  boostShuffle.classList.toggle('empty', !(daily.charges.shuffle>0) || resolving);
+  boostHint.classList.toggle('empty', !(daily.charges.hint>0) || resolving);
+}
+function watchAdFor(type, label){
+  adTitle.textContent=tx('ad_title'); adText.textContent=tx('reward_wait',label);
+  adOverlay.hidden=false;
+  setTimeout(function(){
+    adOverlay.hidden=true;
+    daily.charges[type]=(daily.charges[type]||0)+1;
+    saveDaily(); refreshBoosterUI();
+  }, 1800);
+}
+function doHint(){
+  var avail=trayPieces.filter(function(p){return !p.used;});
+  var spot=null, spotPiece=null;
+  for (var i=0;i<avail.length && !spot;i++){
+    for (var r=0;r<N && !spot;r++) for (var c=0;c<N && !spot;c++){
+      if (canPlace(avail[i].shape,r,c)){ spot={r0:r,c0:c}; spotPiece=avail[i]; }
+    }
+  }
+  if (!spot) return;
+  spotPiece.shape.forEach(function(p){
+    var bg=document.getElementById('bg-'+(spot.r0+p[0])+'-'+(spot.c0+p[1]));
+    if (bg) bg.classList.add('hint');
+  });
+  setTimeout(function(){
+    boardEl.querySelectorAll('.bgcell.hint').forEach(function(e){ e.classList.remove('hint'); });
+  }, 1800);
+}
+boostUndo.addEventListener('click', function(){
+  if (resolving) return;
+  if (!(daily.charges.undo>0)){ watchAdFor('undo','🔙 '+tx('undo')); return; }
+  if (!undoSnapshot) return;
+  daily.charges.undo--; saveDaily();
+  grid=undoSnapshot.grid; score=undoSnapshot.score; trayPieces=undoSnapshot.trayPieces;
+  undoSnapshot=null;
+  renderGrid(); renderTray(); scoreVal.textContent=score; hudScoreVal.textContent=score;
+  refreshBoosterUI();
+});
+boostShuffle.addEventListener('click', function(){
+  if (resolving) return;
+  if (!(daily.charges.shuffle>0)){ watchAdFor('shuffle','🔀 '+tx('shuffle')); return; }
+  daily.charges.shuffle--; saveDaily();
+  fillTray();
+  refreshBoosterUI();
+});
+boostHint.addEventListener('click', function(){
+  if (resolving) return;
+  if (!(daily.charges.hint>0)){ watchAdFor('hint','💡 '+tx('hint')); return; }
+  daily.charges.hint--; saveDaily();
+  doHint();
+  refreshBoosterUI();
+});
+/* "Nasıl oynanır" penceresi: ilk açılışta bir kere (günlük ödül penceresi açıksa o kapanınca), ayarlardan istenince tekrar */
+var howOverlay=document.getElementById('howOverlay'), howBtn=document.getElementById('howBtn'), howOpenBtn=document.getElementById('howOpenBtn');
+function howSeen(){ try{ return !!localStorage.getItem('renklibloklar_howto'); }catch(e){ return true; } }
+function openHow(){ howOverlay.hidden=false; }
+function closeHow(){ howOverlay.hidden=true; try{ localStorage.setItem('renklibloklar_howto','1'); }catch(e){} }
+howBtn.addEventListener('click', closeHow);
+howOpenBtn.addEventListener('click', function(){ settingsOverlay.hidden=true; openHow(); });
+dailyBtn.addEventListener('click', function(){ dailyOverlay.hidden=true; if (!howSeen()) openHow(); });
+loadDaily();
+checkDailyReward();
+if (!howSeen() && dailyOverlay.hidden) openHow();
+refreshBoosterUI();
+})();
+</script>
